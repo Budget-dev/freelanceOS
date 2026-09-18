@@ -1,0 +1,17 @@
+{
+  "name": "freelance-os",
+  "version": "1.0.0",
+  "description": "FreelanceOS — Enterprise Product & System Design",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*",
+    "functions"
+  ],
+  "scripts": {
+    "lint": "echo \"Linting not implemented\"",
+    "test": "echo \"Testing not implemented\"",
+    "build": "echo \"Build not implemented\""
+  }
+}

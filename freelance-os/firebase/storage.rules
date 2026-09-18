@@ -1,0 +1,15 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+    
+    // Storage doesn't have cross-service memberOf access easily without custom claims or duplicating membership.
+    // For MVP, we restrict path access to the user's uid or require server-side signed URLs.
+    // Assuming accountId == uid for MVP individual freelancer architecture, or custom claims.
+    match /accounts/{accountId}/{allPaths=**} {
+      allow read, write: if signedIn() && request.auth.uid == accountId;
+    }
+  }
+}
