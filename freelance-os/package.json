@@ -13,5 +13,8 @@
     "lint": "echo \"Linting not implemented\"",
     "test": "echo \"Testing not implemented\"",
     "build": "echo \"Build not implemented\""
+  },
+  "devDependencies": {
+    "postcss": "^8.5.28"
   }
 }
