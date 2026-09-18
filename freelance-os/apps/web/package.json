@@ -19,7 +19,6 @@
     "tailwind-merge": "^2.3.0"
   },
   "devDependencies": {
-    "@next/swc-win32-x64-msvc": "^14.2.33",
     "@types/node": "^20.0.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
