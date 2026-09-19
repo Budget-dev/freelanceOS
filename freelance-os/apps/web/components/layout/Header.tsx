@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ChevronDown, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const NAVIGATION = [
   {
@@ -40,7 +42,6 @@ const NAVIGATION = [
       { title: "All Applications", href: "/applications", separator: true },
       { title: "Applied", href: "/applications/applied" },
       { title: "Client Replied", href: "/applications/replied" },
-      { title: "Interview", href: "/applications/interview" },
       { title: "Hired", href: "/applications/hired" },
       { title: "Rejected", href: "/applications/rejected" },
     ],
@@ -96,10 +97,24 @@ const NAVIGATION = [
 
 export const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
+  
+  const isDashboardLayout = pathname?.startsWith('/dashboard') || 
+                            pathname?.startsWith('/analyze') || 
+                            pathname?.startsWith('/history') || 
+                            pathname?.startsWith('/applications') || 
+                            pathname?.startsWith('/opportunities') || 
+                            pathname?.startsWith('/settings') || 
+                            pathname?.startsWith('/profile') || 
+                            pathname?.startsWith('/ai') || 
+                            pathname?.startsWith('/billing');
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
-      <div className="flex h-16 max-w-screen-2xl items-center justify-between px-4 md:px-8 mx-auto">
+      <div className={cn(
+        "flex h-16 max-w-screen-2xl items-center justify-between px-4 md:px-8 mx-auto",
+        isDashboardLayout && "lg:pl-[5.5rem]"
+      )}>
         {/* Logo */}
         <div className="flex items-center gap-2 mr-4 md:mr-8">
           <Link href="/" className="flex items-center gap-2 font-bold text-lg tracking-tight text-foreground">
@@ -146,12 +161,16 @@ export const Header = () => {
 
         {/* Right Actions */}
         <div className="flex items-center gap-2 md:gap-3 ml-auto xl:ml-8">
-          <Button variant="ghost" size="sm" className="hidden md:flex font-medium text-sm rounded-full text-muted-foreground hover:text-foreground">
-            Log in
-          </Button>
-          <Button size="sm" className="rounded-full font-medium px-4 md:px-5">
-            Sign up
-          </Button>
+          <Link href="/login">
+            <Button variant="ghost" size="sm" className="hidden md:flex font-medium text-sm rounded-full text-muted-foreground hover:text-foreground">
+              Log in
+            </Button>
+          </Link>
+          <Link href="/signup">
+            <Button size="sm" className="rounded-full font-medium px-4 md:px-5">
+              Sign up
+            </Button>
+          </Link>
           
           {/* Mobile Menu Toggle */}
           <Button 

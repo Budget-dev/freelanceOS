@@ -13,6 +13,7 @@ import {
   Table, Brush, Camera
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useUserPreferences } from "@/contexts/UserPreferencesContext";
 
 const STEPS = [
   { icon: FileText, label: "Requirements", sublabel: "Analyzing scope...", bgColor: "bg-blue-50", color: "text-blue-600" },
@@ -121,7 +122,7 @@ const PROJECTS = [
     posted: "1 week ago",
     budget: "$5,000+",
     proposals: "50+",
-    insight: "The client is still interviewing. Your React Native experience is a perfect fit, but risk is high due to the large scope and lack of detailed specs.",
+    insight: "Your React Native experience is a perfect fit, but risk is high due to the large scope and lack of detailed specs.",
     score: "65%",
     risk: "High",
     quote: "$6.0K+",
@@ -478,6 +479,8 @@ const PROJECTS = [
 
 export function AnalysisCardMockup() {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const { currency } = useUserPreferences();
+  const currSymbol = currency === "INR" ? "₹" : "$";
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -543,7 +546,7 @@ export function AnalysisCardMockup() {
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] md:text-[13px] text-muted-foreground font-medium">
                   <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {project.posted}</span>
                   <span className="hidden sm:inline">•</span>
-                  <span className="flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5" /> {project.budget}</span>
+                  <span className="flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5" /> {project.budget.replace(/\$/g, currSymbol)}</span>
                   <span className="hidden sm:inline">•</span>
                   <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> {project.proposals} proposals</span>
                 </div>
@@ -605,8 +608,8 @@ export function AnalysisCardMockup() {
                   <div className="text-[11px] md:text-[12px] text-muted-foreground font-medium">Risk Level</div>
                 </div>
                 <div className="flex flex-col gap-1">
-                  <div className="font-bold text-[15px] md:text-lg text-foreground">{project.quote}</div>
-                  <div className="text-[11px] md:text-[12px] text-muted-foreground font-medium">Quote</div>
+                  <div className="font-bold text-[15px] md:text-lg text-foreground">{project.quote.replace(/\$/g, currSymbol)}</div>
+                  <div className="text-[11px] md:text-[12px] text-muted-foreground font-medium">Est. Value</div>
                 </div>
                 <div className="flex flex-col gap-1">
                   <div className={`font-bold text-[15px] md:text-lg ${project.rec === 'Good Match' ? 'text-green-600' : project.rec === 'Maybe' ? 'text-yellow-600' : 'text-orange-600'}`}>
