@@ -84,7 +84,7 @@ Firebase Functions can handle lightweight event-driven maintenance or triggers, 
 | Proposal | Personalized proposal generation |
 | Truth Check | Verification of proposal claims against freelancer facts |
 | Communication | Introductions, discovery questions, negotiation, follow-up drafts |
-| Applications | Pipeline, notes, replies, interviews, follow-ups, outcomes |
+| Applications | Pipeline, notes, replies, follow-ups, outcomes |
 | Dashboard | Activity, counts, funnel, performance metrics |
 | Billing | Pro subscription, Razorpay state, entitlement |
 | Platform | Audit, usage, abuse protection, observability |
@@ -314,7 +314,6 @@ Overview
   -> Analyzed
   -> Good Matches
   -> Applications
-  -> Interviews
   -> Hired
 
 Pipeline
@@ -323,14 +322,12 @@ Pipeline
   -> Good Match
   -> Applied
   -> Client Replied
-  -> Interview
   -> Hired / Rejected
 
 Performance
   -> Match Rate
   -> Application Rate
   -> Reply Rate
-  -> Interview Rate
   -> Hire Rate
 ```
 
@@ -1210,7 +1207,6 @@ Recommended structure:
   /applications/{applicationId}
     /notes/{noteId}
     /followUps/{followUpId}
-    /interviews/{interviewId}
     /responses/{responseId}
   /activities/{activityId}
   /usage/{usageId}
@@ -1374,12 +1370,11 @@ analyzed
 good_match
 applied
 client_replied
-interview
 hired
 rejected
 ```
 
-Use subcollections for notes, follow-ups, interviews, and response history when those records become numerous or need independent querying.
+Use subcollections for notes, follow-ups, and response history when those records become numerous or need independent querying.
 
 ---
 
@@ -1399,7 +1394,6 @@ Use a maintained summary document:
   "goodMatches": 47,
   "applications": 31,
   "clientReplies": 12,
-  "interviews": 7,
   "hired": 3,
   "rejected": 14,
   "updatedAt": "timestamp"
@@ -1434,7 +1428,6 @@ application_created
 application_stage_changed
 proposal_generated
 client_replied
-interview_added
 application_hired
 application_rejected
 ```
@@ -2327,14 +2320,11 @@ The truth checker is an explicit trust layer, not a cosmetic add-on.
 
 # 77. Application Tracking Flow
 
-```text
 Analysis
   -> create application
   -> stage = applied
   -> client reply
   -> stage = client_replied
-  -> interview
-  -> stage = interview
   -> final outcome
   -> hired / rejected
 ```
