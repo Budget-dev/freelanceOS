@@ -20,8 +20,8 @@ const NAVIGATION = [
     title: "Analyze Project",
     href: "/analyze",
     items: [
-      { title: "New Analysis", href: "/analyze/new" },
-      { title: "Recent Analyses", href: "/analyze/recent" },
+      { title: "New Analysis", href: "/analyze" },
+      { title: "Recent Analyses", href: "/history" },
     ],
   },
   {
@@ -59,12 +59,7 @@ const NAVIGATION = [
     href: "/profile",
     items: [
       { title: "Personal Information", href: "/profile/personal" },
-      { title: "Skills & Technologies", href: "/profile/skills" },
-      { title: "Experience", href: "/profile/experience" },
-      { title: "Qualifications & Certifications", href: "/profile/qualifications" },
       { title: "Portfolio", href: "/profile/portfolio" },
-      { title: "Previous Projects", href: "/profile/projects" },
-      { title: "Preferences", href: "/profile/preferences" },
     ],
   },
   {

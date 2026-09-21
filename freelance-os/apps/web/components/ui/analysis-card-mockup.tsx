@@ -8,7 +8,7 @@ import {
   ArrowRight, Code, PenTool, Palette, Layout, ShoppingBag, 
   Store, Smartphone, Search, Megaphone, MessageCircle, 
   Video, MonitorPlay, FileSignature, Edit3, Hexagon, 
-  Target, Bot, Zap, BarChart3, Database, Presentation, 
+  Target, BrainCircuit, Zap, BarChart3, Database, Presentation, 
   Building2, Home, Box, Globe, Headset, Briefcase, 
   Table, Brush, Camera
 } from "lucide-react";
@@ -268,7 +268,7 @@ const PROJECTS = [
   {
     title: "Build an AI assistant for a customer support platform",
     category: "AI Development",
-    icon: Bot,
+    icon: BrainCircuit,
     posted: "Just now",
     budget: "$3,000 – $6,000",
     proposals: "3",

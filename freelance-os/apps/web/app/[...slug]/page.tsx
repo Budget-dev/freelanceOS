@@ -1,5 +1,5 @@
-import ComingSoonPage from "@/app/coming-soon/page";
+import { notFound } from "next/navigation";
 
 export default function CatchAllPage() {
-  return <ComingSoonPage />;
+  notFound();
 }
