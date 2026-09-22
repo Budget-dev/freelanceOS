@@ -76,6 +76,7 @@ export interface ApplicationItem {
     regionalMarketRate?: string;
     flagEmoji?: string;
   };
+  evidenceClassification?: EvidenceClassification;
   research?: {
     searchesPerformed: ResearchSearchQuery[];
     companyWebsite?: {

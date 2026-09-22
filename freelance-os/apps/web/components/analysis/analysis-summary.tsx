@@ -137,6 +137,21 @@ function CopyAction({
 export function AnalysisSummary({ result, state }: AnalysisSummaryProps) {
   const [findingsOpen, setFindingsOpen] = useState(true);
   const [geoNotesOpen, setGeoNotesOpen] = useState(false);
+  const [isApplied, setIsApplied] = useState(false);
+
+  useEffect(() => {
+    if (!result) {
+      setIsApplied(false);
+      return;
+    }
+    const targetId = result.client.projectId || result.id;
+    const existing = ApplicationsStorage.getById(targetId);
+    setIsApplied(
+      existing?.stage === "applied" ||
+      existing?.stage === "client_replied" ||
+      existing?.stage === "hired"
+    );
+  }, [result]);
 
   if (state === "idle") {
     return (
@@ -197,15 +212,6 @@ export function AnalysisSummary({ result, state }: AnalysisSummaryProps) {
   const hasContacts = client.contacts.length > 0;
   const verifiedCount = client.contacts.filter((c) => c.status === "verified").length;
   const potentialCount = client.contacts.filter((c) => c.status === "potential").length;
-
-  const [isApplied, setIsApplied] = useState(() => {
-    const existing = ApplicationsStorage.getById(client.projectId || result.id);
-    return (
-      existing?.stage === "applied" ||
-      existing?.stage === "client_replied" ||
-      existing?.stage === "hired"
-    );
-  });
 
   const handleAddToApplied = () => {
     const targetId = client.projectId || result.id;

@@ -908,6 +908,7 @@ export function useMockAnalysis() {
     async (text: string) => {
       if (!text.trim() && uploadedFiles.length === 0) return;
 
+      const filesSnapshot = [...uploadedFiles];
       abortRef.current = false;
 
       // Build user message
@@ -916,7 +917,7 @@ export function useMockAnalysis() {
         role: "user",
         content: text,
         timestamp: new Date(),
-        attachments: uploadedFiles.map((f) => ({
+        attachments: filesSnapshot.map((f) => ({
           name: f.file.name,
           type: f.file.type,
           previewUrl: f.previewUrl,

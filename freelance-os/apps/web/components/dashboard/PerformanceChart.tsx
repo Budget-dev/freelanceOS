@@ -106,6 +106,14 @@ interface PerformanceChartProps {
 
 export function PerformanceChart({ isLoading }: PerformanceChartProps) {
   const [activeRange, setActiveRange] = useState("30d");
+  const [realAnalyses, setRealAnalyses] = useState<any[]>([]);
+
+  useEffect(() => {
+    try {
+      const all = AnalysesStorage.getAll();
+      setRealAnalyses(all);
+    } catch {}
+  }, []);
 
   if (isLoading) {
     return (
@@ -120,15 +128,6 @@ export function PerformanceChart({ isLoading }: PerformanceChartProps) {
       </Card>
     );
   }
-
-  const [realAnalyses, setRealAnalyses] = useState<any[]>([]);
-
-  useEffect(() => {
-    try {
-      const all = AnalysesStorage.getAll();
-      setRealAnalyses(all);
-    } catch {}
-  }, []);
 
   const count = realAnalyses.length;
   const matchCount = realAnalyses.filter((a) => a.matchScore >= 70 || a.recommendation === "apply").length;

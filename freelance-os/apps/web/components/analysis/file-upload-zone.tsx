@@ -132,6 +132,7 @@ export function FileUploadZone({
             >
               {f.previewUrl ? (
                 <div className="relative h-14 w-14 overflow-hidden rounded-lg border border-border/60 bg-slate-50">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={f.previewUrl}
                     alt={f.file.name}

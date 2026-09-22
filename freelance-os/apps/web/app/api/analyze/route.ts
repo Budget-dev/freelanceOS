@@ -112,7 +112,7 @@ function extractDomain(text: string): string | null {
 }
 
 // Helper for Real HTTP Domain Check & Metadata Extraction
-async function verifyDomain(domain: string): Promise<{
+interface DomainProbeResult {
   verified: boolean;
   url: string;
   title?: string;
@@ -120,7 +120,9 @@ async function verifyDomain(domain: string): Promise<{
   emailsFound: string[];
   phonesFound: string[];
   whatsappFound: string[];
-}> {
+}
+
+async function verifyDomain(domain: string): Promise<DomainProbeResult> {
   const targetUrl = `https://${domain}`;
   const emails: string[] = [];
   const phones: string[] = [];
@@ -643,11 +645,13 @@ Required JSON Schema:
 
     // Parallel search executions:
     // A: Domain verification & live HTTP probe
-    const domainPromise = candidateDomain
+    const domainPromise: Promise<DomainProbeResult> = candidateDomain
       ? verifyDomain(candidateDomain)
       : Promise.resolve({
           verified: false,
           url: "",
+          title: undefined,
+          description: undefined,
           emailsFound: [],
           phonesFound: [],
           whatsappFound: [],
@@ -1110,7 +1114,7 @@ Senior Full-Stack Architect & Consultant`,
             regionalMarketRate: fullProject.location!.regionalMarketRate!,
             flagEmoji: fullProject.location!.flagEmoji!,
             isGeoScraped: true,
-            geoScrapingNotes: fullProject.research.evidenceNotes,
+            geoScrapingNotes: fullProject.research?.evidenceNotes || [],
           },
           contacts: contacts.map((c) => ({
             type: c.type,
@@ -1124,8 +1128,8 @@ Senior Full-Stack Architect & Consultant`,
               headline: `${companyName} — Operations in ${fullProject.location!.displayLocation}`,
               industry: "Software & Technology Services",
               teamSize: "10 - 50 Employees",
-              scrapedUrl: fullProject.research.companyWebsite?.url || "https://freelancer.com",
-              summary: fullProject.research.companyWebsite?.summary || `Client organization operating in ${country}.`,
+              scrapedUrl: fullProject.research?.companyWebsite?.url || "https://freelancer.com",
+              summary: fullProject.research?.companyWebsite?.summary || `Client organization operating in ${country}.`,
               techStack,
             },
             clientReputation: {
@@ -1136,7 +1140,7 @@ Senior Full-Stack Architect & Consultant`,
             },
             linkedinProfile: {
               matched: true,
-              companyPage: fullProject.research.linkedin?.url || "https://linkedin.com",
+              companyPage: fullProject.research?.linkedin?.url || "https://linkedin.com",
               keyContact: clientName,
               status: "Verified Page",
             },
