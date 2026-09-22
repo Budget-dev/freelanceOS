@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import {
   Briefcase, Plus, ExternalLink, Github, Trash2, Edit3,
-  Check, Star, Layers, Sparkles, Globe, Eye, ArrowRight,
+  Check, Star, Layers, Globe, Eye, ArrowRight,
   ArrowLeft, Laptop, Smartphone, Tablet, X, RefreshCw,
   Link2, CheckCircle2
 } from "lucide-react";
@@ -13,6 +13,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase/config";
+import { useAuth } from "@/components/providers/AuthContext";
+import { PortfolioStorage } from "@/lib/storage";
 
 const PORTFOLIO_STORAGE_KEY = "freelance_os_portfolio_projects_v1";
 
@@ -28,51 +32,7 @@ export interface PortfolioProject {
   featured?: boolean;
 }
 
-const INITIAL_PROJECTS: PortfolioProject[] = [
-  {
-    id: "proj-1",
-    title: "HealthSphere AI Diagnostic Assistant",
-    category: "AI & Machine Learning",
-    description: "Multi-modal AI assistant analyzing health records and preliminary intake symptoms with automated triage recommendations and physician review portal.",
-    metrics: "$7,000 Contract • 4 weeks delivery • 100% 5-Star Client Review",
-    technologies: ["Next.js", "Python FastAPI", "OpenAI", "PostgreSQL", "Tailwind CSS"],
-    liveUrl: "https://healthsphere-demo.dev",
-    repoUrl: "https://github.com/example/healthsphere-ai",
-    featured: true,
-  },
-  {
-    id: "proj-2",
-    title: "FinFlow Treasury & Currency Exchange",
-    category: "Web Applications",
-    description: "High-throughput financial ledger for cross-border freelancing agencies supporting instant multi-currency payouts and automated tax calculations.",
-    metrics: "$12,500 Contract • London, UK Client • 99.9% Uptime SLA",
-    technologies: ["React", "TypeScript", "Node.js", "Stripe API", "Docker"],
-    liveUrl: "https://finflow-ledger.dev",
-    repoUrl: "https://github.com/example/finflow-treasury",
-    featured: true,
-  },
-  {
-    id: "proj-3",
-    title: "OmniSync Real-Time Logistics Tracker",
-    category: "Full-Stack Architecture",
-    description: "End-to-end telemetry system monitoring container shipments globally with instant geofence webhooks and push notifications.",
-    metrics: "Enterprise Fleet Client • Sydney, Australia • 50k+ daily events",
-    technologies: ["Next.js", "Go", "Redis", "Kafka", "AWS ECS"],
-    liveUrl: "https://omnisync-demo.dev",
-    featured: false,
-  },
-  {
-    id: "proj-4",
-    title: "Lovable SaaS Design System & Billing Hub",
-    category: "Web Applications",
-    description: "Clean interactive dashboard component library featuring framer-motion micro-interactions, dark mode, and integrated LemonSqueezy subscriptions.",
-    metrics: "$4,500 Project • 2 weeks turnaround",
-    technologies: ["Next.js", "Framer Motion", "Tailwind CSS", "shadcn/ui"],
-    liveUrl: "https://saas-hub-demo.dev",
-    repoUrl: "https://github.com/example/saas-design-system",
-    featured: false,
-  },
-];
+const INITIAL_PROJECTS: PortfolioProject[] = [];
 
 const CATEGORIES = [
   "All",
@@ -87,6 +47,22 @@ const SUGGESTED_TECHS = [
   "Tailwind CSS", "Node.js", "PostgreSQL", "MongoDB", "AWS", "Docker"
 ];
 
+export function sanitizeUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  const trimmed = url.trim();
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return trimmed;
+    }
+  } catch {
+    if (!trimmed.includes(":") && !trimmed.startsWith("//") && trimmed.includes(".")) {
+      return `https://${trimmed}`;
+    }
+  }
+  return undefined;
+}
+
 // ── In-App Live Preview Modal ──────────────────────────────────────────
 
 function LivePreviewModal({
@@ -99,7 +75,8 @@ function LivePreviewModal({
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [iframeError, setIframeError] = useState(false);
 
-  const url = project.liveUrl || "https://example.com";
+  const safeLiveUrl = sanitizeUrl(project.liveUrl);
+  const url = safeLiveUrl || "https://example.com";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-6 backdrop-blur-xs animate-in fade-in duration-200">
@@ -109,7 +86,7 @@ function LivePreviewModal({
           <div className="flex items-center gap-2">
             <span className="h-3 w-3 rounded-full bg-red-500/80 inline-block" />
             <span className="h-3 w-3 rounded-full bg-amber-500/80 inline-block" />
-            <span className="h-3 w-3 rounded-full bg-emerald-500/80 inline-block" />
+            <span className="h-3 w-3 rounded-full bg-blue-500/80 inline-block" />
             <span className="ml-2 font-semibold text-slate-200 hidden sm:inline">
               Live Preview: {project.title}
             </span>
@@ -117,7 +94,7 @@ function LivePreviewModal({
 
           {/* URL address bar */}
           <div className="flex items-center gap-1.5 rounded-md bg-white/10 px-3 py-1 text-[11px] font-mono text-slate-300 max-w-xs truncate">
-            <Globe className="h-3 w-3 text-emerald-400 shrink-0" />
+            <Globe className="h-3 w-3 text-blue-400 shrink-0" />
             <span className="truncate">{url}</span>
           </div>
 
@@ -243,12 +220,13 @@ function LivePreviewModal({
 // ── Main Portfolio Manager ─────────────────────────────────────────────
 
 export function PortfolioManager() {
-  const [projects, setProjects] = useState<PortfolioProject[]>(INITIAL_PROJECTS);
+  const [projects, setProjects] = useState<PortfolioProject[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saveToast, setSaveToast] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
+  const { user } = useAuth();
 
   // Live preview modal target
   const [previewProject, setPreviewProject] = useState<PortfolioProject | null>(null);
@@ -267,25 +245,49 @@ export function PortfolioManager() {
   const [repoUrl, setRepoUrl] = useState("");
   const [featured, setFeatured] = useState(false);
 
-  // Load from localStorage
+  // Load from local storage and Firestore
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(PORTFOLIO_STORAGE_KEY);
-      if (saved) {
-        setProjects(JSON.parse(saved));
+      const local = PortfolioStorage.getAll();
+      if (local && local.length > 0) {
+        setProjects(local);
       }
-    } catch {
-      // ignore
-    }
-    setIsLoaded(true);
-  }, []);
+    } catch {}
 
-  const saveToStorage = (updated: PortfolioProject[]) => {
+    if (!user) {
+      setIsLoaded(true);
+      return;
+    }
+    const loadProjects = async () => {
+      try {
+        const docRef = doc(db, "users", user.uid, "profile", "portfolio");
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.projects) {
+            setProjects(data.projects);
+            localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(data.projects));
+          }
+        }
+      } catch (err) {
+        console.error("Error loading portfolio", err);
+      }
+      setIsLoaded(true);
+    };
+    loadProjects();
+  }, [user]);
+
+  const saveToStorage = async (updated: PortfolioProject[]) => {
     setProjects(updated);
     try {
       localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(updated));
-    } catch {
-      // ignore
+    } catch {}
+    if (!user) return;
+    try {
+      const docRef = doc(db, "users", user.uid, "profile", "portfolio");
+      await setDoc(docRef, { projects: updated });
+    } catch (err) {
+      console.error("Error saving portfolio", err);
     }
   };
 
@@ -430,625 +432,446 @@ export function PortfolioManager() {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800 shadow-sm"
+            className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-800 shadow-sm"
           >
-            <Check className="h-4 w-4 text-emerald-600" />
+            <Check className="h-4 w-4 text-blue-600" />
             <span>{saveToast}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ── Guided Portfolio Builder Launch Banner ── */}
-      <div className="rounded-2xl border border-primary/20 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-5 sm:p-6 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1 max-w-xl">
-          <div className="flex items-center gap-2">
-            <span className="flex size-6 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
-              <Sparkles className="h-3.5 w-3.5" />
-            </span>
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-              Interactive Website Builder
-            </span>
+
+
+      {isAdding ? (
+        <div className="w-full space-y-8 pb-16">
+          {/* Top Navigation Tabs */}
+          <div className="flex flex-wrap items-center border-b border-border/60 gap-8 px-2 sticky top-0 bg-slate-50/80 backdrop-blur-md z-40 pt-4 -mx-2">
+            {[
+              { num: 1, label: "Basics & Category" },
+              { num: 2, label: "Tech Stack & Metrics" },
+              { num: 3, label: "Links & Preview" },
+            ].map((s) => (
+              <button
+                key={s.num}
+                type="button"
+                onClick={() => setCurrentStep(s.num as 1 | 2 | 3)}
+                className={cn(
+                  "pb-4 text-sm font-semibold transition-colors border-b-2",
+                  currentStep === s.num
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {s.label}
+              </button>
+            ))}
+            {/* Right side buttons */}
+            <div className="ml-auto pb-4 flex items-center gap-3">
+              <Button variant="outline" size="sm" onClick={handleCancelForm} className="h-9 px-4 text-xs font-semibold">
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleSaveProject} className="h-9 px-6 text-xs font-bold gap-1.5 bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
+                <CheckCircle2 className="h-4 w-4" /> {editingId ? "Update Project" : "Save Project"}
+              </Button>
+            </div>
           </div>
-          <h3 className="text-base sm:text-lg font-bold tracking-tight text-white">
-            Build & Publish Your Shareable Live Portfolio
-          </h3>
-          <p className="text-xs text-slate-300 leading-relaxed">
-            Step-by-step guided builder with real-time split preview. Generates a custom public link (e.g. <code className="bg-white/10 px-1 py-0.5 rounded text-emerald-300">/p/your-name</code>) ready to send directly to clients.
-          </p>
-        </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <Link
-            href="/profile/portfolio/builder"
-            className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-bold text-slate-900 shadow-sm hover:bg-slate-100 transition-colors"
-          >
-            <span>Launch Builder</span>
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-      </div>
-
-      {/* ── Header & Add Button ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-bold text-foreground tracking-tight flex items-center gap-2">
-            <Briefcase className="h-4.5 w-4.5 text-slate-700" />
-            Portfolio Projects ({projects.length})
-          </h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Add case studies and live previewable links to showcase your best work to clients.
-          </p>
-        </div>
-
-        {!isAdding && (
-          <Button onClick={handleStartAdd} size="sm" className="h-8.5 text-xs gap-1.5 shadow-sm">
-            <Plus className="h-3.5 w-3.5" />
-            Add Project (Step-by-Step)
-          </Button>
-        )}
-      </div>
-
-      {/* ── STEP-BY-STEP PROJECT CREATION WIZARD CARD ── */}
-      <AnimatePresence>
-        {isAdding && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.25 }}
-          >
-            <Card className="border-primary/40 bg-gradient-to-b from-slate-50/70 via-white to-white shadow-md overflow-hidden">
-              {/* Stepper Progress Header */}
-              <div className="border-b border-border/60 bg-slate-900 text-white px-5 py-3.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-emerald-400" />
-                    <span className="text-xs font-bold tracking-tight">
-                      {editingId ? "Edit Project" : "New Portfolio Project"}
-                    </span>
-                    <span className="text-[11px] text-slate-400">• Step {currentStep} of 3</span>
+          {/* Form Content Area */}
+          <div className="bg-white border border-border/40 rounded-xl shadow-sm px-8 py-2">
+            
+            {/* ── STEP 1: Basics ── */}
+            {currentStep === 1 && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-0">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 py-8 border-b border-border/50 first:pt-8 last:border-0 last:pb-8">
+                  <div className="md:col-span-1 space-y-2">
+                    <h4 className="text-sm font-bold text-foreground">Project Details</h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Give your project a clear title and assign it to the most relevant category.
+                    </p>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleCancelForm}
-                    className="h-7 text-xs text-slate-300 hover:text-white hover:bg-white/10"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-
-                {/* Progress bar */}
-                <div className="mt-3 flex items-center gap-2">
-                  <div className="h-1.5 flex-1 rounded-full bg-white/20 overflow-hidden">
-                    <motion.div
-                      className="h-full bg-emerald-400 rounded-full"
-                      animate={{
-                        width: currentStep === 1 ? "33%" : currentStep === 2 ? "66%" : "100%",
-                      }}
-                      transition={{ duration: 0.3 }}
-                    />
-                  </div>
-                  <span className="text-[10px] font-mono text-emerald-400 font-semibold">
-                    {currentStep === 1 ? "Basics" : currentStep === 2 ? "Tech & Metrics" : "Links & Preview"}
-                  </span>
-                </div>
-              </div>
-
-              {/* Step Navigation Pills */}
-              <div className="flex items-center border-b border-border/50 bg-slate-50/50 px-5 py-2 gap-2 text-xs">
-                {[
-                  { num: 1, label: "1. Basics & Category" },
-                  { num: 2, label: "2. Tech & Metrics" },
-                  { num: 3, label: "3. Live Links & Preview" },
-                ].map((s) => (
-                  <button
-                    key={s.num}
-                    type="button"
-                    onClick={() => setCurrentStep(s.num as 1 | 2 | 3)}
-                    className={cn(
-                      "px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors",
-                      currentStep === s.num
-                        ? "bg-white text-foreground shadow-2xs font-bold border border-border/60"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Card Body - Content by Step */}
-              <CardContent className="p-5">
-                {/* ── STEP 1: Basics ── */}
-                {currentStep === 1 && (
-                  <motion.div
-                    initial={{ opacity: 0, x: 8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -8 }}
-                    className="space-y-4"
-                  >
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-semibold text-foreground">
-                          Project Title <span className="text-destructive">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={title}
-                          onChange={(e) => setTitle(e.target.value)}
-                          placeholder="e.g. HealthSphere AI Diagnostic Assistant"
-                          className="w-full rounded-lg border border-border/70 bg-white px-3 py-2 text-xs text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
-                          autoFocus
-                          required
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-semibold text-foreground">
-                          Project Category
-                        </label>
-                        <select
-                          value={category}
-                          onChange={(e) => setCategory(e.target.value)}
-                          className="w-full rounded-lg border border-border/70 bg-white px-3 py-2 text-xs text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
-                        >
-                          <option value="AI & Machine Learning">AI & Machine Learning</option>
-                          <option value="Web Applications">Web Applications</option>
-                          <option value="Full-Stack Architecture">Full-Stack Architecture</option>
-                          <option value="Mobile">Mobile</option>
-                        </select>
-                      </div>
-                    </div>
-
+                  <div className="md:col-span-2 space-y-4">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-foreground">
-                        Project Scope & Case Study Description <span className="text-destructive">*</span>
-                      </label>
-                      <textarea
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        rows={4}
-                        placeholder="Describe the client's goal, the technical architecture you designed, and the impact achieved..."
-                        className="w-full rounded-lg border border-border/70 bg-white px-3 py-2 text-xs leading-relaxed text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20 resize-y"
+                      <label className="text-xs font-semibold text-foreground">Project Title <span className="text-destructive">*</span></label>
+                      <input
+                        type="text"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        placeholder="e.g. HealthSphere AI Diagnostic Assistant"
+                        className="w-full rounded-lg border border-border/70 bg-slate-50/50 px-3 py-2 text-sm text-foreground transition-colors focus:border-ring focus:bg-white focus:outline-none focus:ring-2 focus:ring-ring/20"
+                        autoFocus
                         required
                       />
                     </div>
-                  </motion.div>
-                )}
+                    <div className="space-y-1.5 max-w-sm">
+                      <label className="text-xs font-semibold text-foreground">Project Category</label>
+                      <select
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value)}
+                        className="w-full rounded-lg border border-border/70 bg-slate-50/50 px-3 py-2 text-sm text-foreground transition-colors focus:border-ring focus:bg-white focus:outline-none focus:ring-2 focus:ring-ring/20"
+                      >
+                        <option value="AI & Machine Learning">AI & Machine Learning</option>
+                        <option value="Web Applications">Web Applications</option>
+                        <option value="Full-Stack Architecture">Full-Stack Architecture</option>
+                        <option value="Mobile">Mobile</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
 
-                {/* ── STEP 2: Tech Stack & Metrics ── */}
-                {currentStep === 2 && (
-                  <motion.div
-                    initial={{ opacity: 0, x: 8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -8 }}
-                    className="space-y-4"
-                  >
-                    <div className="space-y-2">
-                      <label className="text-xs font-semibold text-foreground">
-                        Select Technologies & Frameworks
-                      </label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {SUGGESTED_TECHS.map((tech) => {
-                          const isSelected = selectedTechs.includes(tech);
-                          return (
-                            <button
-                              key={tech}
-                              type="button"
-                              onClick={() => handleToggleTech(tech)}
-                              className={cn(
-                                "px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1",
-                                isSelected
-                                  ? "bg-slate-900 text-white shadow-2xs"
-                                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                              )}
-                            >
-                              {isSelected && <Check className="h-3 w-3 text-emerald-400" />}
-                              <span>{tech}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 py-8 border-b border-border/50 first:pt-8 last:border-0 last:pb-8">
+                  <div className="md:col-span-1 space-y-2">
+                    <h4 className="text-sm font-bold text-foreground">Scope & Case Study</h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Describe the client&apos;s goal, the technical architecture you designed, and the impact achieved.
+                    </p>
+                  </div>
+                  <div className="md:col-span-2 space-y-1.5">
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      rows={5}
+                      placeholder="Describe the client's goal, the technical architecture you designed, and the impact achieved..."
+                      className="w-full rounded-lg border border-border/70 bg-slate-50/50 px-3 py-2 text-sm text-foreground transition-colors focus:border-ring focus:bg-white focus:outline-none focus:ring-2 focus:ring-ring/20 resize-y"
+                      required
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
 
-                      {/* Custom tag input */}
-                      <div className="flex gap-2 pt-1">
-                        <input
-                          type="text"
-                          value={customTechInput}
-                          onChange={(e) => setCustomTechInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              handleAddCustomTech();
-                            }
-                          }}
-                          placeholder="Add custom tool (e.g. GraphQL, Redis)..."
-                          className="flex-1 rounded-lg border border-border/70 bg-white px-3 py-1.5 text-xs text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={handleAddCustomTech}
-                          className="h-8 px-3 text-xs gap-1"
-                        >
-                          <Plus className="h-3 w-3" />
-                          Add
-                        </Button>
-                      </div>
-
-                      {/* Selected tags list */}
-                      <div className="flex flex-wrap gap-1 pt-1">
-                        {selectedTechs.map((st) => (
-                          <Badge
-                            key={st}
-                            variant="secondary"
-                            className="gap-1 py-0.5 px-2 text-[11px] bg-slate-100 text-slate-800"
+            {/* ── STEP 2: Tech Stack & Metrics ── */}
+            {currentStep === 2 && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-0">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 py-8 border-b border-border/50 first:pt-8 last:border-0 last:pb-8">
+                  <div className="md:col-span-1 space-y-2">
+                    <h4 className="text-sm font-bold text-foreground">Technologies Used</h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Select or add the frameworks, languages, and tools used to build this project.
+                    </p>
+                  </div>
+                  <div className="md:col-span-2 space-y-4">
+                    <div className="flex flex-wrap gap-2">
+                      {SUGGESTED_TECHS.map((t) => {
+                        const isSelected = selectedTechs.includes(t);
+                        return (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => handleToggleTech(t)}
+                            className={cn(
+                              "px-3 py-1.5 text-xs font-medium rounded-lg border transition-all flex items-center gap-1.5",
+                              isSelected
+                                ? "bg-blue-50 border-blue-200 text-blue-700 shadow-sm"
+                                : "bg-white border-border/60 text-slate-600 hover:bg-slate-50"
+                            )}
                           >
-                            <span>{st}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleTech(st)}
-                              className="text-slate-400 hover:text-destructive"
-                            >
-                              <X className="h-2.5 w-2.5" />
-                            </button>
+                            {isSelected && <Check className="h-3 w-3 text-blue-600" />}
+                            {t}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="flex gap-2 max-w-sm pt-2">
+                      <input
+                        type="text"
+                        value={customTechInput}
+                        onChange={(e) => setCustomTechInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddCustomTech();
+                          }
+                        }}
+                        placeholder="Add other tech..."
+                        className="w-full rounded-lg border border-border/70 bg-slate-50/50 px-3 py-2 text-sm text-foreground transition-colors focus:border-ring focus:bg-white focus:outline-none focus:ring-2 focus:ring-ring/20"
+                      />
+                      <Button type="button" onClick={handleAddCustomTech} variant="secondary" className="px-3">
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 py-8 border-b border-border/50 first:pt-8 last:border-0 last:pb-8">
+                  <div className="md:col-span-1 space-y-2">
+                    <h4 className="text-sm font-bold text-foreground">Impact & Metrics</h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Optional: Highlight key achievements, contract value, or turnaround time to impress potential clients.
+                    </p>
+                  </div>
+                  <div className="md:col-span-2 space-y-1.5">
+                    <input
+                      type="text"
+                      value={metrics}
+                      onChange={(e) => setMetrics(e.target.value)}
+                      placeholder="e.g. $12,500 Contract • 99.9% Uptime SLA"
+                      className="w-full rounded-lg border border-border/70 bg-slate-50/50 px-3 py-2 text-sm text-foreground transition-colors focus:border-ring focus:bg-white focus:outline-none focus:ring-2 focus:ring-ring/20"
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ── STEP 3: Links & Preview ── */}
+            {currentStep === 3 && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-0">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 py-8 border-b border-border/50 first:pt-8 last:border-0 last:pb-8">
+                  <div className="md:col-span-1 space-y-2">
+                    <h4 className="text-sm font-bold text-foreground">External Links</h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Provide a live demo URL and a repository link if open-source.
+                    </p>
+                  </div>
+                  <div className="md:col-span-2 space-y-4">
+                    <div className="space-y-1.5 max-w-lg">
+                      <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <Globe className="h-3.5 w-3.5 text-blue-600" /> Live Previewable Demo URL
+                      </label>
+                      <input
+                        type="url"
+                        value={liveUrl}
+                        onChange={(e) => setLiveUrl(e.target.value)}
+                        placeholder="https://my-live-demo.dev"
+                        className="w-full rounded-lg border border-border/70 bg-slate-50/50 px-3 py-2 text-sm text-foreground transition-colors focus:border-ring focus:bg-white focus:outline-none focus:ring-2 focus:ring-ring/20"
+                      />
+                    </div>
+                    <div className="space-y-1.5 max-w-lg">
+                      <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <Github className="h-3.5 w-3.5 text-slate-800" /> GitHub Repo / Case Study URL
+                      </label>
+                      <input
+                        type="url"
+                        value={repoUrl}
+                        onChange={(e) => setRepoUrl(e.target.value)}
+                        placeholder="https://github.com/my-org/project"
+                        className="w-full rounded-lg border border-border/70 bg-slate-50/50 px-3 py-2 text-sm text-foreground transition-colors focus:border-ring focus:bg-white focus:outline-none focus:ring-2 focus:ring-ring/20"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 py-8 border-b border-border/50 first:pt-8 last:border-0 last:pb-8">
+                  <div className="md:col-span-1 space-y-2">
+                    <h4 className="text-sm font-bold text-foreground">Visibility</h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Pin this project to highlight it prominently on your public portfolio.
+                    </p>
+                  </div>
+                  <div className="md:col-span-2 flex items-center h-full">
+                    <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-foreground select-none">
+                      <input
+                        type="checkbox"
+                        checked={featured}
+                        onChange={(e) => setFeatured(e.target.checked)}
+                        className="rounded border-border size-4 text-primary focus:ring-primary"
+                      />
+                      <span>Pin as Featured Project</span>
+                    </label>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+            
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* ── Header & Add Button ── */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-foreground tracking-tight flex items-center gap-2">
+                <Briefcase className="h-4.5 w-4.5 text-slate-700" />
+                Portfolio Projects ({projects.length})
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Add case studies and live previewable links to showcase your best work to clients.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Link href="/p/alex-rivera" target="_blank" rel="noopener noreferrer">
+                <Button variant="outline" size="sm" className="h-8.5 text-xs font-semibold gap-1.5 shadow-2xs">
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Live Preview
+                </Button>
+              </Link>
+              <Link href="/profile/portfolio/builder">
+                <Button variant="outline" size="sm" className="h-8.5 text-xs font-semibold gap-1.5 shadow-2xs">
+                  <Edit3 className="h-3.5 w-3.5" />
+                  Portfolio Builder
+                </Button>
+              </Link>
+              <Button onClick={handleStartAdd} size="sm" className="h-8.5 text-xs font-semibold gap-1.5 shadow-sm">
+                <Plus className="h-3.5 w-3.5" />
+                Add Project
+              </Button>
+            </div>
+          </div>
+
+          {/* ── Category Filter Pills ── */}
+          <div className="flex flex-wrap gap-1.5 items-center">
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setSelectedCategory(cat)}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium rounded-lg transition-all",
+                  selectedCategory === cat
+                    ? "bg-slate-900 text-white shadow-2xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
+                )}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Projects Grid ── */}
+          {filteredProjects.length === 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="py-14 text-center">
+                <p className="text-sm font-medium text-foreground">No projects in this category</p>
+                <p className="text-xs text-muted-foreground mt-1">Try selecting a different filter or add a new project.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredProjects.map((proj) => (
+                <Card
+                  key={proj.id}
+                  className={cn(
+                    "border-border/60 transition-all duration-200 hover:shadow-sm flex flex-col justify-between group",
+                    proj.featured ? "border-slate-300 bg-gradient-to-b from-slate-50/40 to-white" : "bg-white"
+                  )}
+                >
+                  <CardHeader className="pb-2.5 pt-4 px-5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant="outline" className="text-[10px] h-4.5 px-1.5 font-normal bg-slate-50">
+                            {proj.category}
+                          </Badge>
+                          {proj.featured && (
+                            <Badge className="bg-amber-50 text-amber-800 border-amber-200 text-[10px] h-4.5 px-1.5 font-normal gap-0.5">
+                              <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
+                              Featured
+                            </Badge>
+                          )}
+                        </div>
+                        <h3 className="text-sm font-bold text-foreground leading-snug tracking-tight truncate">
+                          {proj.title}
+                        </h3>
+                      </div>
+
+                      <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={() => toggleFeatured(proj.id)}
+                          className={cn(
+                            "p-1 rounded hover:bg-slate-100 transition-colors",
+                            proj.featured ? "text-amber-500" : "text-slate-300 hover:text-slate-500"
+                          )}
+                          title={proj.featured ? "Remove featured" : "Set as featured"}
+                        >
+                          <Star className={cn("h-3.5 w-3.5", proj.featured && "fill-amber-500")} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleStartEdit(proj)}
+                          className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                          title="Edit project"
+                        >
+                          <Edit3 className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(proj.id, proj.title)}
+                          className="p-1 rounded text-slate-400 hover:text-destructive hover:bg-red-50 transition-colors"
+                          title="Delete project"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="px-5 pb-4 space-y-3 flex-1 flex flex-col justify-between">
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      {proj.description}
+                    </p>
+
+                    <div className="space-y-2.5 pt-1">
+                      {/* Metrics */}
+                      {proj.metrics && (
+                        <div className="rounded-md bg-slate-50 border border-border/40 px-2.5 py-1.5 text-[11px] font-medium text-slate-700">
+                          {proj.metrics}
+                        </div>
+                      )}
+
+                      {/* Tech stack */}
+                      <div className="flex flex-wrap gap-1">
+                        {proj.technologies.map((t) => (
+                          <Badge
+                            key={t}
+                            variant="secondary"
+                            className="text-[10px] h-4.5 font-normal bg-slate-100 text-slate-700"
+                          >
+                            {t}
                           </Badge>
                         ))}
                       </div>
-                    </div>
 
-                    <div className="space-y-1.5 pt-2 border-t border-border/40">
-                      <label className="text-xs font-semibold text-foreground">
-                        Client Metrics / Result Highlight
-                      </label>
-                      <input
-                        type="text"
-                        value={metrics}
-                        onChange={(e) => setMetrics(e.target.value)}
-                        placeholder="e.g. $7,000 Contract • 4 weeks delivery • 100% 5-Star Review"
-                        className="w-full rounded-lg border border-border/70 bg-white px-3 py-2 text-xs text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
-                      />
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* ── STEP 3: Links & Live Preview Card ── */}
-                {currentStep === 3 && (
-                  <motion.div
-                    initial={{ opacity: 0, x: 8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -8 }}
-                    className="space-y-4"
-                  >
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                          <Globe className="h-3.5 w-3.5 text-blue-600" />
-                          Live Previewable Demo URL
-                        </label>
-                        <input
-                          type="url"
-                          value={liveUrl}
-                          onChange={(e) => setLiveUrl(e.target.value)}
-                          placeholder="https://my-live-demo.dev"
-                          className="w-full rounded-lg border border-border/70 bg-white px-3 py-2 text-xs text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
-                        />
-                        <p className="text-[10.5px] text-muted-foreground">
-                          Allows potential clients to test or preview your application directly.
-                        </p>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                          <Github className="h-3.5 w-3.5 text-slate-800" />
-                          GitHub Repo / Case Study URL
-                        </label>
-                        <input
-                          type="url"
-                          value={repoUrl}
-                          onChange={(e) => setRepoUrl(e.target.value)}
-                          placeholder="https://github.com/my-org/project"
-                          className="w-full rounded-lg border border-border/70 bg-white px-3 py-2 text-xs text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="pt-2">
-                      <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-foreground select-none">
-                        <input
-                          type="checkbox"
-                          checked={featured}
-                          onChange={(e) => setFeatured(e.target.checked)}
-                          className="rounded border-border size-3.5 text-primary focus:ring-primary"
-                        />
-                        <span>Pin as Featured Project (displays prominently at top of portfolio)</span>
-                      </label>
-                    </div>
-
-                    {/* Real-time Live Preview Card */}
-                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                          <Eye className="h-3 w-3 text-primary" />
-                          Real-Time Card Preview
-                        </span>
-                        {liveUrl && (
-                          <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-white text-emerald-700 border-emerald-200">
-                            <span className="size-1.5 rounded-full bg-emerald-500" />
-                            Live Link Enabled
-                          </Badge>
-                        )}
-                      </div>
-
-                      <div className="rounded-lg bg-white border border-border/60 p-3 space-y-2 shadow-2xs">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <Badge variant="outline" className="text-[9.5px] h-4.5 bg-slate-50">
-                              {category}
-                            </Badge>
-                            {featured && (
-                              <Badge className="bg-amber-50 text-amber-800 border-amber-200 text-[9.5px] h-4.5 gap-0.5">
-                                <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
-                                Featured
-                              </Badge>
-                            )}
-                          </div>
-                          {liveUrl && (
+                      {/* Links & In-App Live Preview Button */}
+                      <div className="flex items-center justify-between pt-2 border-t border-border/40">
+                        <div className="flex items-center gap-2">
+                          {proj.liveUrl ? (
                             <button
                               type="button"
-                              onClick={() =>
-                                setPreviewProject({
-                                  id: "preview-temp",
-                                  title: title || "Preview Project",
-                                  category,
-                                  description: description || "No description",
-                                  metrics,
-                                  technologies: selectedTechs,
-                                  liveUrl,
-                                })
-                              }
-                              className="inline-flex items-center gap-1 text-[11px] text-primary font-semibold hover:underline"
+                              onClick={() => setPreviewProject(proj)}
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline bg-primary/5 hover:bg-primary/10 px-2.5 py-1 rounded-md transition-colors"
                             >
-                              <Eye className="h-3 w-3" />
-                              Test Live Preview
+                              <Eye className="h-3.5 w-3.5" />
+                              Live Preview
                             </button>
+                          ) : (
+                            <span className="text-[11px] text-muted-foreground">No demo link</span>
+                          )}
+
+                          {proj.liveUrl && (
+                            <a
+                              href={proj.liveUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-slate-400 hover:text-slate-700 p-1"
+                              title="Open URL in new tab"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
                           )}
                         </div>
 
-                        <p className="text-xs font-bold text-foreground">
-                          {title || "Untitled Project Title"}
-                        </p>
-                        <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed">
-                          {description || "Project description will appear here..."}
-                        </p>
-                        <div className="flex flex-wrap gap-1">
-                          {selectedTechs.slice(0, 4).map((t) => (
-                            <Badge key={t} variant="secondary" className="text-[9.5px] h-4">
-                              {t}
-                            </Badge>
-                          ))}
-                        </div>
+                        {proj.repoUrl && (
+                          <a
+                            href={proj.repoUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 hover:text-slate-900"
+                          >
+                            <Github className="h-3 w-3" />
+                            Repo
+                          </a>
+                        )}
                       </div>
                     </div>
-                  </motion.div>
-                )}
-
-                {/* ── Fixed Bottom Step Navigation & Submit Action Bar ── */}
-                <div className="flex items-center justify-between pt-4 mt-4 border-t border-border/50">
-                  <div>
-                    {currentStep > 1 && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentStep((s) => (s - 1) as 1 | 2)}
-                        className="h-8 text-xs gap-1.5"
-                      >
-                        <ArrowLeft className="h-3.5 w-3.5" />
-                        Back
-                      </Button>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {currentStep < 3 ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => {
-                          if (currentStep === 1 && !title.trim()) {
-                            alert("Please enter a project title.");
-                            return;
-                          }
-                          setCurrentStep((s) => (s + 1) as 2 | 3);
-                        }}
-                        className="h-8 text-xs font-semibold gap-1.5 shadow-sm"
-                      >
-                        <span>Next Step</span>
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </Button>
-                    ) : (
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => handleSaveProject()}
-                        className="h-8.5 px-4 text-xs font-bold gap-1.5 shadow-sm bg-emerald-600 hover:bg-emerald-700 text-white"
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        {editingId ? "Update Project" : "Save Project & Publish"}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Category Filter Pills ── */}
-      <div className="flex flex-wrap gap-1.5 items-center">
-        {CATEGORIES.map((cat) => (
-          <button
-            key={cat}
-            type="button"
-            onClick={() => setSelectedCategory(cat)}
-            className={cn(
-              "px-3 py-1.5 text-xs font-medium rounded-lg transition-all",
-              selectedCategory === cat
-                ? "bg-slate-900 text-white shadow-2xs"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
-            )}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Projects Grid ── */}
-      {filteredProjects.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="py-14 text-center">
-            <p className="text-sm font-medium text-foreground">No projects in this category</p>
-            <p className="text-xs text-muted-foreground mt-1">Try selecting a different filter or add a new project.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredProjects.map((proj) => (
-            <Card
-              key={proj.id}
-              className={cn(
-                "border-border/60 transition-all duration-200 hover:shadow-sm flex flex-col justify-between group",
-                proj.featured ? "border-slate-300 bg-gradient-to-b from-slate-50/40 to-white" : "bg-white"
-              )}
-            >
-              <CardHeader className="pb-2.5 pt-4 px-5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <Badge variant="outline" className="text-[10px] h-4.5 px-1.5 font-normal bg-slate-50">
-                        {proj.category}
-                      </Badge>
-                      {proj.featured && (
-                        <Badge className="bg-amber-50 text-amber-800 border-amber-200 text-[10px] h-4.5 px-1.5 font-normal gap-0.5">
-                          <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
-                          Featured
-                        </Badge>
-                      )}
-                    </div>
-                    <h3 className="text-sm font-bold text-foreground leading-snug tracking-tight truncate">
-                      {proj.title}
-                    </h3>
-                  </div>
-
-                  <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                    <button
-                      type="button"
-                      onClick={() => toggleFeatured(proj.id)}
-                      className={cn(
-                        "p-1 rounded hover:bg-slate-100 transition-colors",
-                        proj.featured ? "text-amber-500" : "text-slate-300 hover:text-slate-500"
-                      )}
-                      title={proj.featured ? "Remove featured" : "Set as featured"}
-                    >
-                      <Star className={cn("h-3.5 w-3.5", proj.featured && "fill-amber-500")} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleStartEdit(proj)}
-                      className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-                      title="Edit project"
-                    >
-                      <Edit3 className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(proj.id, proj.title)}
-                      className="p-1 rounded text-slate-400 hover:text-destructive hover:bg-red-50 transition-colors"
-                      title="Delete project"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </CardHeader>
-
-              <CardContent className="px-5 pb-4 space-y-3 flex-1 flex flex-col justify-between">
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  {proj.description}
-                </p>
-
-                <div className="space-y-2.5 pt-1">
-                  {/* Metrics */}
-                  {proj.metrics && (
-                    <div className="rounded-md bg-slate-50 border border-border/40 px-2.5 py-1.5 text-[11px] font-medium text-slate-700">
-                      {proj.metrics}
-                    </div>
-                  )}
-
-                  {/* Tech stack */}
-                  <div className="flex flex-wrap gap-1">
-                    {proj.technologies.map((t) => (
-                      <Badge
-                        key={t}
-                        variant="secondary"
-                        className="text-[10px] h-4.5 font-normal bg-slate-100 text-slate-700"
-                      >
-                        {t}
-                      </Badge>
-                    ))}
-                  </div>
-
-                  {/* Links & In-App Live Preview Button */}
-                  <div className="flex items-center justify-between pt-2 border-t border-border/40">
-                    <div className="flex items-center gap-2">
-                      {proj.liveUrl ? (
-                        <button
-                          type="button"
-                          onClick={() => setPreviewProject(proj)}
-                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline bg-primary/5 hover:bg-primary/10 px-2.5 py-1 rounded-md transition-colors"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                          Live Preview
-                        </button>
-                      ) : (
-                        <span className="text-[11px] text-muted-foreground">No demo link</span>
-                      )}
-
-                      {proj.liveUrl && (
-                        <a
-                          href={proj.liveUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-slate-400 hover:text-slate-700 p-1"
-                          title="Open URL in new tab"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
-                      )}
-                    </div>
-
-                    {proj.repoUrl && (
-                      <a
-                        href={proj.repoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 hover:text-slate-900"
-                      >
-                        <Github className="h-3 w-3" />
-                        Repo
-                      </a>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </>
       )}
+
     </div>
   );
 }

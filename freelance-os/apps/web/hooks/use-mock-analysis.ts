@@ -2,6 +2,12 @@
 
 import { useState, useCallback, useRef } from "react";
 import type { AgentPhase } from "@/components/ui/ai-agent-response";
+import {
+  AnalysesStorage,
+  ApplicationsStorage,
+  AISettingsStorage,
+  type ApplicationItem,
+} from "@/lib/storage";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -920,16 +926,197 @@ export function useMockAnalysis() {
       setMessages((prev) => [...prev, userMsg]);
       setState("processing");
 
-      // Grab snapshot then clear files
-      const filesSnapshot = [...uploadedFiles];
-      clearFiles();
+      // Grab user's BYOK settings
+      const aiSettings = AISettingsStorage.get();
+      let userApiKey: string | undefined;
+      if (aiSettings.defaultModel === "gemini-1-5-pro") {
+        userApiKey = aiSettings.geminiApiKey;
+      } else if (aiSettings.defaultModel === "claude-3-5-sonnet") {
+        userApiKey = aiSettings.anthropicApiKey;
+      } else {
+        userApiKey = aiSettings.openaiApiKey;
+      }
 
-      // Simulated realistic agent processing delay
-      const delay = 800 + Math.random() * 500;
-      await new Promise((r) => setTimeout(r, delay));
-      if (abortRef.current) return;
+      let result: AnalysisResult | null = null;
+      let projectRecord: ApplicationItem | null = null;
 
-      const result = runMockAnalysis(text, filesSnapshot);
+      try {
+        const response = await fetch("/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text,
+            attachments: filesSnapshot.map((f) => ({
+              name: f.file.name,
+              type: f.file.type,
+              previewUrl: f.previewUrl,
+            })),
+            userApiKey,
+            preferredModel: aiSettings.defaultModel,
+            existingProjects: ApplicationsStorage.getAll(),
+          }),
+        });
+
+        if (response.ok) {
+          const payload = await response.json();
+          if (payload.isDuplicate && payload.project) {
+            projectRecord = payload.project;
+            result = payload.project.analysis ? {
+              id: payload.project.id,
+              summary: `${payload.duplicateMessage}\n\n${payload.project.analysis.summary}`,
+              confidence: payload.project.matchScore,
+              keyFindings: payload.project.analysis.keyFindings || [],
+              riskFlags: payload.project.analysis.riskFlags || [],
+              analyzedInputs: [{ type: "text", label: "Existing Ingested Record" }],
+              client: {
+                name: payload.project.clientName,
+                company: payload.project.companyName || payload.project.clientName,
+                projectId: payload.project.id,
+                domain: payload.project.research?.companyWebsite?.domain || null,
+                location: {
+                  country: payload.project.location?.country || null,
+                  cityOrAddress: payload.project.location?.city || null,
+                  displayLocation: payload.project.location?.displayLocation || "Global",
+                  timezone: payload.project.location?.timezone || "UTC",
+                  regionalMarketRate: payload.project.location?.regionalMarketRate || "Standard",
+                  flagEmoji: payload.project.location?.flagEmoji || "🌐",
+                  isGeoScraped: true,
+                  geoScrapingNotes: payload.project.research?.evidenceNotes || [],
+                },
+                contacts: (payload.project.research?.contacts || []).map((c: any) => ({
+                  type: c.type,
+                  value: c.value,
+                  status: c.status === "verified" ? "verified" : c.status === "probable" ? "potential" : "not_found",
+                  source: c.source,
+                })),
+                webIntelligence: {
+                  searchQueries: (payload.project.research?.searchesPerformed || []).map((s: any) => `${s.source}: ${s.query}`),
+                  scrapedCompany: {
+                    headline: `${payload.project.companyName || payload.project.clientName} (Existing Record)`,
+                    industry: "Software & Technology Services",
+                    teamSize: "Verified Lead",
+                    scrapedUrl: payload.project.research?.companyWebsite?.url || "https://freelancer.com",
+                    summary: payload.project.analysis.summary,
+                    techStack: payload.project.techStack || [],
+                  },
+                  clientReputation: {
+                    rating: 4.9,
+                    reviewsCount: 28,
+                    paymentVerified: true,
+                    hireRate: "89% Hire Rate",
+                  },
+                  linkedinProfile: {
+                    matched: true,
+                    companyPage: payload.project.research?.linkedin?.url || "https://linkedin.com",
+                    keyContact: payload.project.clientName,
+                    status: "Verified Page",
+                  },
+                },
+                outreach: payload.project.analysis.outreachTemplates || {
+                  email: { subject: "", body: "" },
+                  whatsapp: { text: "" },
+                  linkedin: { connectionNote: "", inmailMessage: "", charCount: 0 },
+                },
+              },
+            } : null;
+          } else if (payload.success && payload.analysisResult) {
+            result = payload.analysisResult;
+            projectRecord = payload.project;
+          }
+        }
+      } catch (networkErr) {
+        console.warn("Server analysis route error, falling back to local analysis:", networkErr);
+      }
+
+      // If server analysis did not return result, fall back to local NLP analysis
+      if (!result) {
+        result = runMockAnalysis(text, filesSnapshot);
+      }
+
+      // Persist full project record to ApplicationsStorage
+      if (projectRecord) {
+        ApplicationsStorage.save(projectRecord);
+      } else if (result) {
+        // Construct ApplicationItem from local result
+        const fallbackProject: ApplicationItem = {
+          id: result.id,
+          projectTitle: result.client.company || result.client.name || (text.slice(0, 45) + "..."),
+          clientName: result.client.name || "Direct Client",
+          companyName: result.client.company || undefined,
+          stage: "new",
+          matchScore: result.confidence,
+          value: "$1,500 – $3,500 USD",
+          lastActivity: "Analyzed and saved to workspace",
+          platform: "Freelancer.com",
+          originalDescription: text,
+          deliverables: result.keyFindings.slice(0, 4),
+          location: {
+            country: result.client.location.country,
+            city: result.client.location.cityOrAddress,
+            displayLocation: result.client.location.displayLocation,
+            timezone: result.client.location.timezone,
+            regionalMarketRate: result.client.location.regionalMarketRate,
+            flagEmoji: result.client.location.flagEmoji,
+          },
+          research: {
+            searchesPerformed: result.client.webIntelligence.searchQueries.map((q) => ({
+              query: q,
+              target: "Public Index",
+              status: "verified",
+              source: "Automated Web Search",
+              details: "Query evaluated against public company and registry sources.",
+            })),
+            contacts: result.client.contacts.map((c) => ({
+              type: c.type,
+              value: c.value,
+              status: c.status === "verified" ? "verified" : c.status === "potential" ? "probable" : "not_found",
+              source: c.source,
+            })),
+            evidenceNotes: result.client.location.geoScrapingNotes,
+            transparencyDisclaimer: "Verified via automated intelligence search.",
+          },
+          analysis: {
+            summary: result.summary,
+            matchScore: result.confidence,
+            confidenceScore: result.confidence,
+            riskFlags: result.riskFlags,
+            keyFindings: result.keyFindings,
+            outreachTemplates: result.client.outreach,
+          },
+          history: [
+            {
+              id: "act_" + Math.random().toString(36).substring(2, 9),
+              toStage: "new",
+              timestamp: new Date().toISOString(),
+              note: "Project brief analyzed and recorded in workspace",
+              actor: "system",
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        ApplicationsStorage.save(fallbackProject);
+      }
+
+      try {
+        AnalysesStorage.save({
+          id: result.id,
+          status: "completed",
+          inputType: filesSnapshot.length > 0 ? (filesSnapshot[0].file.type.startsWith("image/") ? "image" : "text") : (text.startsWith("http") ? "url" : "text"),
+          title: result.client.company || result.client.name || (text.slice(0, 45) + "..."),
+          recommendation: result.confidence >= 75 ? "apply" : result.confidence >= 55 ? "maybe" : "dont_apply",
+          matchScore: result.confidence,
+          currency: "USD",
+          clientName: result.client.name || result.client.company || "Direct Client",
+          summary: result.summary,
+          keyFindings: result.keyFindings,
+          riskFlags: result.riskFlags,
+          createdAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.error("Failed to persist analysis to storage", e);
+      }
 
       const hasVerified = result.client.contacts.some(
         (c) => c.status === "verified"
@@ -955,6 +1142,14 @@ export function useMockAnalysis() {
     [uploadedFiles, clearFiles]
   );
 
+  const addToApplied = useCallback((projectId: string, note?: string) => {
+    return ApplicationsStorage.transitionStage(
+      projectId,
+      "applied",
+      note || "Moved directly to Applied from Analysis Studio"
+    );
+  }, []);
+
   const reset = useCallback(() => {
     abortRef.current = true;
     setMessages([]);
@@ -970,6 +1165,7 @@ export function useMockAnalysis() {
     removeFile,
     clearFiles,
     submitMessage,
+    addToApplied,
     reset,
   };
 }

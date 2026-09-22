@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Send, User, Sparkles, AlertCircle,
+  Send, User, Bot, AlertCircle,
   FileText, ImageIcon, RotateCcw,
   Copy, Check, ChevronDown, ChevronUp,
 } from "lucide-react";
@@ -44,8 +44,8 @@ function TypingIndicator() {
       animate={{ opacity: 1, y: 0 }}
       className="flex gap-3 px-1 w-full"
     >
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700">
-        <Sparkles className="h-4 w-4" />
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700 shadow-2xs">
+        <Bot className="h-4 w-4" />
       </div>
       <div className="flex items-center gap-2 rounded-2xl bg-slate-50 border border-border/60 px-4 py-2.5 text-[12.5px] text-muted-foreground shadow-2xs">
         <PixelDotsLoader />
@@ -99,7 +99,7 @@ function MessageBubble({
           {isError ? (
             <AlertCircle className="h-4 w-4 text-destructive" />
           ) : (
-            <Sparkles className="h-4 w-4" />
+            <Bot className="h-4 w-4" />
           )}
         </div>
       )}
@@ -296,8 +296,8 @@ export function ChatInterface({
       >
         {messages.length === 0 && state === "idle" && (
           <div className="flex h-full flex-col items-center justify-center text-center py-20">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 shadow-sm">
-              <Sparkles className="h-8 w-8 text-slate-700" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 border border-border/60 shadow-xs mb-3">
+              <Bot className="h-6 w-6 text-slate-700" />
             </div>
             <h3 className="text-lg font-bold text-foreground tracking-tight">
               Freelancer.com Analysis

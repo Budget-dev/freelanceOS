@@ -1,86 +1,67 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, Suspense, type ReactNode } from "react";
 import Link from "next/link";
-import { Search, Users, Zap, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  updateProfile,
+} from "firebase/auth";
+import { auth } from "@/lib/firebase/config";
 
 export function AuthSectionTwo({ isLogin = false }: { isLogin?: boolean }) {
+  const [isVideoLoaded, setIsVideoLoaded] = useState(false);
+
   return (
-    <section className="flex flex-col min-h-[calc(100vh-4rem)] lg:h-[calc(100vh-4rem)] bg-white p-3 sm:p-4 text-black antialiased [font-synthesis:none]">
+    <section className="flex flex-col min-h-[calc(100vh-4rem)] lg:h-[calc(100vh-4rem)] bg-[#FDFCFB] p-3 sm:p-4 text-black antialiased [font-synthesis:none]">
       <div className="grid flex-1 min-h-0 gap-4 lg:gap-6 lg:grid-cols-[1.1fr_0.9fr]">
         
-        {/* LEFT PANEL */}
-        <div className="hidden lg:flex flex-col justify-center overflow-hidden rounded-[16px] bg-[#F8F9FA] px-12 lg:px-16 relative border border-black/5">
-          <div className="flex w-full max-w-[600px] flex-col h-full min-h-0 justify-center">
-            
-            <div className="space-y-6 max-w-[420px] relative z-10">
-              <div className="space-y-2">
-                <p className="text-xs font-bold tracking-[0.15em] text-muted-foreground uppercase">
-                  Work Smarter
-                </p>
-                <h2 className="text-4xl lg:text-[44px] font-bold tracking-tight text-foreground leading-[1.1]">
-                  Find better opportunities.
-                </h2>
-              </div>
-              
-              <p className="text-[17px] text-muted-foreground leading-relaxed pr-6">
-                Analyze projects, discover client insights, and make smarter decisions — all in one place.
+        {/* LEFT PANEL: Autoplay looping video with watermark cropped & graceful placeholder tagline */}
+        <div className="hidden lg:flex relative w-full h-full overflow-hidden rounded-[20px] bg-gradient-to-br from-[#fedac2] via-[#fae3d9] to-[#ebdcf0] border border-stone-200/60 shadow-md items-center justify-center">
+          
+          {/* Branded Fallback / Tagline visible while video loads */}
+          <div
+            className={`absolute inset-0 flex flex-col items-center justify-center p-8 text-center transition-opacity duration-700 ${
+              isVideoLoaded ? "opacity-0 pointer-events-none" : "opacity-100"
+            }`}
+          >
+            <div className="max-w-md space-y-4">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/70 backdrop-blur-sm border border-black/5 text-xs font-semibold text-stone-800 shadow-2xs">
+                FreelanceOS Intelligence
+              </span>
+              <h2 className="text-2xl lg:text-3xl font-bold tracking-tight text-stone-900 leading-snug">
+                Apply smarter, faster, and win verified opportunities.
+              </h2>
+              <p className="text-sm text-stone-700/80 leading-relaxed font-medium">
+                Auditing client briefs and generating truth-checked proposals with calibrated pricing.
               </p>
-
-              <div className="space-y-7 pt-6">
-                
-                {/* Feature 1 */}
-                <div className="flex gap-4 items-start">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm border border-black/5 mt-0.5">
-                    <Search className="h-5 w-5 text-foreground" strokeWidth={2.5} />
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="font-bold text-[15px] text-foreground">Analyze Projects</h3>
-                    <p className="text-[14px] text-muted-foreground leading-snug">Understand requirements, detect red flags and find missing info.</p>
-                  </div>
-                </div>
-
-                {/* Feature 2 */}
-                <div className="flex gap-4 items-start">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm border border-black/5 mt-0.5">
-                    <Users className="h-5 w-5 text-foreground" strokeWidth={2.5} />
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="font-bold text-[15px] text-foreground">Discover Clients</h3>
-                    <p className="text-[14px] text-muted-foreground leading-snug">Get insights about companies and their public presence.</p>
-                  </div>
-                </div>
-
-                {/* Feature 3 */}
-                <div className="flex gap-4 items-start">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm border border-black/5 mt-0.5">
-                    <Zap className="h-5 w-5 text-foreground" strokeWidth={2.5} />
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="font-bold text-[15px] text-foreground">Save Time</h3>
-                    <p className="text-[14px] text-muted-foreground leading-snug">Focus on the right opportunities and apply with confidence.</p>
-                  </div>
-                </div>
-
-              </div>
             </div>
-
-            {/* Laptop Illustration Decorative block */}
-            <div className="absolute right-[-15%] top-1/2 -translate-y-1/2 w-[55%] h-[65%] rounded-l-[20px] shadow-2xl bg-white border border-black/10 overflow-hidden hidden xl:block">
-               <img 
-                 src="https://images.unsplash.com/photo-1600132806370-bf17e65e942f?q=80&w=1000&auto=format&fit=crop" 
-                 alt="Workspace" 
-                 className="w-full h-full object-cover opacity-90"
-               />
-               <div className="absolute inset-0 bg-gradient-to-tr from-white/40 to-transparent mix-blend-overlay"></div>
-            </div>
-
           </div>
+
+          {/* Autoplay Video with Watermark Cropping via Scale & Offset */}
+          <video
+            src="https://vennky.sirv.com/Prompt-1789913060650%20(2).mp4"
+            autoPlay
+            loop
+            muted
+            playsInline
+            onLoadedData={() => setIsVideoLoaded(true)}
+            onCanPlay={() => setIsVideoLoaded(true)}
+            className={`w-full h-full object-cover scale-[1.12] -translate-x-3 -translate-y-3 transition-opacity duration-700 ${
+              isVideoLoaded ? "opacity-100" : "opacity-0"
+            }`}
+          />
         </div>
 
         {/* RIGHT PANEL */}
         <div className="flex min-h-0 items-center justify-center px-6 py-8 sm:px-10 lg:px-12">
-          <AuthForm isLogin={isLogin} />
+          <Suspense fallback={<div className="w-full max-w-[420px] h-96 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>}>
+            <AuthForm isLogin={isLogin} />
+          </Suspense>
         </div>
         
       </div>
@@ -88,7 +69,134 @@ export function AuthSectionTwo({ isLogin = false }: { isLogin?: boolean }) {
   );
 }
 
+function getSafeRedirectUrl(rawRedirect: string | null): string {
+  if (!rawRedirect) return "/dashboard";
+  // Strict check to prevent Open Redirect attacks:
+  // Must start with a single slash '/' and not '//' or any protocol
+  if (rawRedirect.startsWith("/") && !rawRedirect.startsWith("//") && !rawRedirect.includes("://")) {
+    return rawRedirect;
+  }
+  return "/dashboard";
+}
+
+function formatAuthError(error: any): string {
+  const code = error?.code || "";
+  const msg = error?.message || "";
+  
+  if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found") {
+    return "Invalid email or password. Please verify your credentials.";
+  }
+  if (code === "auth/email-already-in-use") {
+    return "An account with this email already exists. Please log in instead.";
+  }
+  if (code === "auth/weak-password") {
+    return "Password should be at least 6 characters long.";
+  }
+  if (code === "auth/invalid-email") {
+    return "Please enter a valid email address.";
+  }
+  if (code === "auth/popup-closed-by-user") {
+    return "Google sign-in was cancelled.";
+  }
+  if (code === "auth/api-key-not-valid" || msg.includes("api-key")) {
+    return "Firebase configuration is not initialized or invalid. Please check your NEXT_PUBLIC_FIREBASE_* environment variables.";
+  }
+  return msg || "An unexpected error occurred during authentication.";
+}
+
 function AuthForm({ isLogin }: { isLogin: boolean }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTarget = getSafeRedirectUrl(searchParams.get("redirect"));
+
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    try {
+      if (isLogin) {
+        try {
+          await signInWithEmailAndPassword(auth, email.trim(), password);
+        } catch (loginErr: any) {
+          const code = loginErr?.code;
+          // If no account exists for this email, automatically create account and sign them up!
+          if (
+            code === "auth/user-not-found" ||
+            code === "auth/invalid-credential"
+          ) {
+            try {
+              const userCred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+              const defaultName = email.trim().split("@")[0] || "Freelancer";
+              if (userCred.user) {
+                try {
+                  await updateProfile(userCred.user, { displayName: defaultName });
+                } catch {
+                  // non-fatal
+                }
+              }
+              router.push(redirectTarget);
+              return;
+            } catch (signupErr: any) {
+              if (signupErr?.code === "auth/email-already-in-use") {
+                setError("Incorrect password for this account. Please try again or click Forgot password.");
+                return;
+              }
+              if (signupErr?.code === "auth/weak-password") {
+                setError("No account found. To create your account automatically, password must be at least 6 characters.");
+                return;
+              }
+              setError(formatAuthError(signupErr));
+              return;
+            }
+          }
+          throw loginErr;
+        }
+      } else {
+        const userCred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        const displayName = `${firstName.trim()} ${lastName.trim()}`.trim();
+        if (displayName && userCred.user) {
+          try {
+            await updateProfile(userCred.user, { displayName });
+          } catch {
+            // non-fatal
+          }
+        }
+      }
+      router.push(redirectTarget);
+    } catch (err: any) {
+      setError(formatAuthError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError(null);
+    setGoogleLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      router.push(redirectTarget);
+    } catch (err: any) {
+      setError(formatAuthError(err));
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleAppleSignIn = () => {
+    setError("Apple sign-in requires an active Apple Developer service configuration in production.");
+  };
+
   return (
     <div className="mx-auto w-full max-w-[420px] text-center">
       <div className="space-y-2">
@@ -101,8 +209,18 @@ function AuthForm({ isLogin }: { isLogin: boolean }) {
       </div>
 
       <div className="mt-8 grid gap-3 sm:grid-cols-2">
-        <SocialButton icon={<GoogleIcon />} label={`Continue with Google`} />
-        <SocialButton icon={<AppleIcon />} label={`Continue with Apple`} />
+        <SocialButton
+          icon={googleLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleIcon />}
+          label={googleLoading ? "Signing in..." : "Continue with Google"}
+          onClick={handleGoogleSignIn}
+          disabled={googleLoading || loading}
+        />
+        <SocialButton
+          icon={<AppleIcon />}
+          label="Continue with Apple"
+          onClick={handleAppleSignIn}
+          disabled={googleLoading || loading}
+        />
       </div>
 
       <div className="my-7 flex items-center gap-4 text-sm text-muted-foreground">
@@ -111,50 +229,88 @@ function AuthForm({ isLogin }: { isLogin: boolean }) {
         <div className="h-px flex-1 bg-border" />
       </div>
 
-      <form className="space-y-4 text-left">
+      {error && (
+        <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50/80 p-3 text-left text-xs font-medium text-red-800">
+          <AlertCircle className="h-4 w-4 shrink-0 text-red-600 mt-0.5" />
+          <span className="leading-relaxed">{error}</span>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4 text-left">
         {!isLogin && (
           <div className="grid gap-4 sm:grid-cols-2">
-            <FieldBox label="First Name" type="text" />
-            <FieldBox label="Last Name" type="text" />
+            <FieldBox
+              label="First Name"
+              type="text"
+              value={firstName}
+              onChange={setFirstName}
+              placeholder="Jane"
+              required
+            />
+            <FieldBox
+              label="Last Name"
+              type="text"
+              value={lastName}
+              onChange={setLastName}
+              placeholder="Doe"
+            />
           </div>
         )}
 
         <FieldBox 
           label="Email" 
           placeholder="Enter your email" 
-          type="email" 
+          type="email"
+          value={email}
+          onChange={setEmail}
+          required
           icon={<Mail className="h-[18px] w-[18px] text-muted-foreground" />} 
         />
         <FieldBox 
           label="Password" 
-          placeholder="Enter your password" 
-          type="password" 
+          placeholder={isLogin ? "Enter your password" : "At least 6 characters"} 
+          type="password"
+          value={password}
+          onChange={setPassword}
+          required
           icon={<Lock className="h-[18px] w-[18px] text-muted-foreground" />} 
           isPassword
         />
 
         <div className="flex items-center justify-between pt-1">
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" className="rounded border-gray-300 text-black shadow-sm focus:border-black focus:ring-black size-4" />
+            <input
+              type="checkbox"
+              defaultChecked
+              className="rounded border-gray-300 text-black shadow-sm focus:border-black focus:ring-black size-4"
+            />
             <span className="text-[14px] font-medium text-foreground">Keep me signed in</span>
           </label>
           {isLogin && (
-            <Link href="#" className="text-[14px] font-medium text-foreground underline underline-offset-4 hover:text-black/80">
+            <Link
+              href="/forgot-password"
+              className="text-[14px] font-medium text-foreground underline underline-offset-4 hover:text-black/80"
+            >
               Forgot password?
             </Link>
           )}
         </div>
 
         <button
-          type="button"
-          className="mt-6 flex h-[46px] w-full items-center justify-center rounded-lg border border-black/40 bg-black text-[16px] font-medium text-white transition-colors hover:bg-black/85 shadow-sm"
+          type="submit"
+          disabled={loading || googleLoading}
+          className="mt-6 flex h-[46px] w-full items-center justify-center gap-2 rounded-lg border border-black/40 bg-black text-[16px] font-medium text-white transition-colors hover:bg-black/85 disabled:opacity-60 shadow-sm"
         >
-          {isLogin ? "Log In" : "Sign Up"}
+          {loading && <Loader2 className="h-4 w-4 animate-spin text-white" />}
+          {loading ? (isLogin ? "Signing In..." : "Creating Account...") : (isLogin ? "Log In" : "Sign Up")}
         </button>
 
         <p className="text-center text-[14px] text-muted-foreground pt-4">
           {isLogin ? "Don't have an account? " : "Already have an account? "}
-          <Link href={isLogin ? "/signup" : "/login"} className="font-semibold text-foreground underline underline-offset-2 hover:text-black/80">
+          <Link
+            href={isLogin ? "/signup" : "/login"}
+            className="font-semibold text-foreground underline underline-offset-2 hover:text-black/80"
+          >
             {isLogin ? "Sign up" : "Log in"}
           </Link>
         </p>
@@ -163,11 +319,23 @@ function AuthForm({ isLogin }: { isLogin: boolean }) {
   );
 }
 
-function SocialButton({ icon, label }: { icon: ReactNode; label: string }) {
+function SocialButton({
+  icon,
+  label,
+  onClick,
+  disabled
+}: {
+  icon: ReactNode;
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="button"
-      className="flex h-[42px] items-center justify-center gap-2.5 rounded-lg border border-input bg-white px-3 text-[14px] font-medium leading-none text-foreground transition-colors hover:bg-muted shadow-sm"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex h-[42px] items-center justify-center gap-2.5 rounded-lg border border-input bg-white px-3 text-[14px] font-medium leading-none text-foreground transition-colors hover:bg-muted disabled:opacity-60 shadow-sm"
     >
       <span className="shrink-0">{icon}</span>
       <span className="whitespace-nowrap">{label}</span>
@@ -180,13 +348,19 @@ function FieldBox({
   placeholder,
   type = "text",
   icon,
-  isPassword
+  isPassword,
+  value,
+  onChange,
+  required,
 }: {
   label: string;
   placeholder?: string;
   type?: string;
   icon?: ReactNode;
   isPassword?: boolean;
+  value?: string;
+  onChange?: (val: string) => void;
+  required?: boolean;
 }) {
   const [showPassword, setShowPassword] = useState(false);
 
@@ -196,6 +370,9 @@ function FieldBox({
       <input
         type={isPassword ? (showPassword ? "text" : "password") : type}
         placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange?.(e.target.value)}
+        required={required}
         className="min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground text-[14px]"
       />
       <span className="shrink-0 text-[14px] font-medium text-foreground mr-1">{label}</span>
@@ -204,6 +381,7 @@ function FieldBox({
           type="button" 
           onClick={() => setShowPassword(!showPassword)}
           className="shrink-0 text-muted-foreground hover:text-foreground transition-colors ml-1"
+          aria-label={showPassword ? "Hide password" : "Show password"}
         >
           {showPassword ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
         </button>

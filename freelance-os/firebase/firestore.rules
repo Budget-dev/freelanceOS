@@ -10,6 +10,12 @@ service cloud.firestore {
         /databases/$(database)/documents/accounts/$(accountId)/members/$(request.auth.uid)
       );
     }
+
+    // Direct user-scoped data (Personal Profile, Portfolio, Applications)
+    // Enforces strict IDOR protection: only the authenticated user can access their own document tree.
+    match /users/{userId}/{document=**} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
     
     match /accounts/{accountId}/profile/{docId} {
       allow read, write: if memberOf(accountId);

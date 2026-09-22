@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { AnalysesStorage } from "@/lib/storage";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { BarChart3 } from "lucide-react";
@@ -120,9 +121,31 @@ export function PerformanceChart({ isLoading }: PerformanceChartProps) {
     );
   }
 
-  const currentData = DEMO_DATA[activeRange] ?? DEMO_DATA["30d"];
-  const totalAnalyzed = currentData.reduce((sum, d) => sum + d.analyzed, 0);
-  const totalMatched = currentData.reduce((sum, d) => sum + d.matched, 0);
+  const [realAnalyses, setRealAnalyses] = useState<any[]>([]);
+
+  useEffect(() => {
+    try {
+      const all = AnalysesStorage.getAll();
+      setRealAnalyses(all);
+    } catch {}
+  }, []);
+
+  const count = realAnalyses.length;
+  const matchCount = realAnalyses.filter((a) => a.matchScore >= 70 || a.recommendation === "apply").length;
+
+  const currentData: PerformanceDataPoint[] = count > 0 ? [
+    { label: "Analyses", analyzed: count, matched: matchCount },
+    { label: "Good Fits", analyzed: matchCount, matched: matchCount },
+  ] : [
+    { label: "Mon", analyzed: 0, matched: 0 },
+    { label: "Tue", analyzed: 0, matched: 0 },
+    { label: "Wed", analyzed: 0, matched: 0 },
+    { label: "Thu", analyzed: 0, matched: 0 },
+    { label: "Fri", analyzed: 0, matched: 0 },
+  ];
+
+  const totalAnalyzed = count;
+  const totalMatched = matchCount;
 
   return (
     <Card>

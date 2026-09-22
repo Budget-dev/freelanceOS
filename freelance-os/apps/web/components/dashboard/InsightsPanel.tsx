@@ -5,7 +5,6 @@ import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ArrowRight,
-  Sparkles,
   TrendingUp,
   Target,
   Zap,
@@ -86,11 +85,11 @@ export function InsightsPanel({ insights, isLoading }: InsightsPanelProps) {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-muted-foreground" />
+          <Zap className="h-4 w-4 text-muted-foreground" />
           <CardTitle>Performance Insights</CardTitle>
         </div>
         <Link
-          href="/app/dashboard/performance"
+          href="/dashboard"
           className="flex items-center gap-1 text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors"
         >
           View All
@@ -100,7 +99,7 @@ export function InsightsPanel({ insights, isLoading }: InsightsPanelProps) {
       <CardContent>
         {data.length === 0 ? (
           <div className="py-6 text-center">
-            <Sparkles className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+            <Zap className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
             <p className="text-sm font-medium text-foreground">
               Not enough data yet
             </p>

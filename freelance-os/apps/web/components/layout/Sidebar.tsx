@@ -10,14 +10,14 @@ import {
   Settings,
   UserCircle,
   ClipboardList,
-  Sparkles,
   Search,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/components/providers/AuthContext";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,6 +69,26 @@ interface SidebarProps {
 export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(true);
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, logout } = useAuth();
+
+  const handleSignOut = async () => {
+    try {
+      await logout();
+      router.push("/login");
+    } catch (err) {
+      console.error("Signout error", err);
+    }
+  };
+
+  const displayName = user?.displayName || "Freelancer";
+  const displayEmail = user?.email || "freelancer@example.com";
+  const initials = (user?.displayName
+    ? user.displayName.slice(0, 2)
+    : user?.email
+      ? user.email.slice(0, 2)
+      : "FL"
+  ).toUpperCase();
 
   return (
     <>
@@ -82,7 +102,7 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
 
       <motion.div
         className={cn(
-          "sidebar fixed left-0 top-0 z-50 h-full shrink-0 border-r bg-white transition-transform lg:translate-x-0",
+          "sidebar fixed left-0 top-0 z-50 h-full shrink-0 border-r bg-[#FDFCFB] transition-transform lg:translate-x-0",
           isMobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
         initial={isCollapsed ? "closed" : "open"}
@@ -93,7 +113,7 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
         onMouseLeave={() => setIsCollapsed(true)}
       >
         <motion.div
-          className="relative z-40 flex h-full shrink-0 flex-col bg-white text-muted-foreground transition-all"
+          className="relative z-40 flex h-full shrink-0 flex-col bg-[#FDFCFB] text-muted-foreground transition-all"
           variants={contentVariants}
         >
           <motion.ul variants={staggerVariants} className="flex h-full flex-col">
@@ -204,12 +224,12 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
                       <DropdownMenuTrigger className="w-full outline-none" asChild>
                         <button className="flex h-11 w-full flex-row items-center gap-3 rounded-md px-1.5 transition-colors hover:bg-muted">
                           <Avatar className="size-[26px] shrink-0">
-                            <AvatarFallback className="bg-primary/10 text-xs font-medium text-primary">FL</AvatarFallback>
+                            <AvatarFallback className="bg-primary/10 text-xs font-medium text-primary">{initials}</AvatarFallback>
                           </Avatar>
                           <motion.li variants={variants} className="flex w-full items-center overflow-hidden">
                             {(!isCollapsed || isMobileOpen) && (
                               <div className="flex flex-col items-start text-left">
-                                <span className="truncate text-[13px] font-medium leading-tight text-foreground">Freelancer</span>
+                                <span className="truncate text-[13px] font-medium leading-tight text-foreground">{displayName}</span>
                                 <span className="truncate text-[11px] leading-tight text-muted-foreground">Pro Plan</span>
                               </div>
                             )}
@@ -219,11 +239,11 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
                       <DropdownMenuContent side="right" sideOffset={10} className="w-56">
                         <div className="flex flex-row items-center gap-2 p-2">
                           <Avatar className="size-8 shrink-0">
-                            <AvatarFallback className="bg-primary/10 text-xs font-medium text-primary">FL</AvatarFallback>
+                            <AvatarFallback className="bg-primary/10 text-xs font-medium text-primary">{initials}</AvatarFallback>
                           </Avatar>
                           <div className="flex flex-col text-left">
-                            <span className="text-sm font-medium">Freelancer Name</span>
-                            <span className="line-clamp-1 text-xs text-muted-foreground">freelancer@example.com</span>
+                            <span className="text-sm font-medium">{displayName}</span>
+                            <span className="line-clamp-1 text-xs text-muted-foreground">{displayEmail}</span>
                           </div>
                         </div>
                         <DropdownMenuSeparator />
@@ -233,7 +253,7 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
                           </Link>
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem className="flex cursor-pointer items-center gap-2 text-destructive">
+                        <DropdownMenuItem onClick={handleSignOut} className="flex cursor-pointer items-center gap-2 text-destructive focus:text-destructive">
                           <LogOut className="h-4 w-4" /> Sign out
                         </DropdownMenuItem>
                       </DropdownMenuContent>

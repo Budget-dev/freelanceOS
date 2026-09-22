@@ -1,3 +1,6 @@
+// Disable Next.js lockfile patching in monorepo workspaces
+process.env.NEXT_IGNORE_INCORRECT_LOCKFILE = "1";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -8,12 +11,6 @@ const nextConfig = {
         hostname: 'cdn.21st.dev',
       },
     ],
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
   },
 };
 

@@ -34,7 +34,7 @@ export function ProfileNav({ activeTab }: ProfileNavProps) {
 
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-xs py-1 px-2.5 font-normal bg-slate-50 text-slate-700">
-            Profile Strength: <span className="font-semibold text-emerald-600 ml-1">96%</span>
+            Profile Strength: <span className="font-semibold text-blue-600 ml-1">96%</span>
           </Badge>
         </div>
       </div>

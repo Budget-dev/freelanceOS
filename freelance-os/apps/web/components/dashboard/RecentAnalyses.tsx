@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -15,10 +16,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { useUserPreferences, formatCurrency } from "@/contexts/UserPreferencesContext";
+import { AnalysesStorage } from "@/lib/storage";
 
 /**
  * AnalysisMetadata matches the system design §42 analysis metadata model.
- * In production, this comes from Firestore /accounts/{accountId}/analyses/{analysisId}
+ * In production, this comes from Firestore or local storage.
  */
 export interface AnalysisMetadata {
   id: string;
@@ -35,86 +38,6 @@ export interface AnalysisMetadata {
   createdAt: string;
   completedAt?: string;
 }
-
-/** Demo data matching the exact schema from §42 */
-const DEMO_ANALYSES: AnalysisMetadata[] = [
-  {
-    id: "an_001",
-    accountId: "acc_123",
-    status: "completed",
-    inputType: "text",
-    title: "React SaaS Dashboard",
-    recommendation: "apply",
-    matchScore: 87,
-    budgetMin: 1200,
-    budgetMax: 1800,
-    currency: "USD",
-    clientName: "TechVenture Inc.",
-    createdAt: "2026-09-18T14:30:00Z",
-    completedAt: "2026-09-18T14:32:00Z",
-  },
-  {
-    id: "an_002",
-    accountId: "acc_123",
-    status: "completed",
-    inputType: "url",
-    title: "E-commerce Platform Redesign",
-    recommendation: "apply",
-    matchScore: 92,
-    budgetMin: 2500,
-    budgetMax: 4000,
-    currency: "USD",
-    clientName: "ShopWave",
-    createdAt: "2026-09-17T10:15:00Z",
-    completedAt: "2026-09-17T10:18:00Z",
-  },
-  {
-    id: "an_003",
-    accountId: "acc_123",
-    status: "completed",
-    inputType: "text",
-    title: "Mobile App for Fitness Tracking",
-    recommendation: "maybe",
-    matchScore: 68,
-    budgetMin: 3000,
-    budgetMax: 5000,
-    currency: "USD",
-    clientName: "FitLife Co.",
-    createdAt: "2026-09-16T09:00:00Z",
-    completedAt: "2026-09-16T09:03:00Z",
-  },
-  {
-    id: "an_004",
-    accountId: "acc_123",
-    status: "completed",
-    inputType: "image",
-    title: "Brand Identity & Logo Design",
-    recommendation: "dont_apply",
-    matchScore: 42,
-    budgetMin: 300,
-    budgetMax: 600,
-    currency: "USD",
-    clientName: "StartupXYZ",
-    createdAt: "2026-09-15T16:45:00Z",
-    completedAt: "2026-09-15T16:47:00Z",
-  },
-  {
-    id: "an_005",
-    accountId: "acc_123",
-    status: "running",
-    inputType: "url",
-    title: "AI Chatbot Integration",
-    recommendation: "apply",
-    matchScore: 0,
-    budgetMin: 1500,
-    budgetMax: 2500,
-    currency: "USD",
-    clientName: "DataFlow AI",
-    createdAt: "2026-09-19T00:10:00Z",
-  },
-];
-
-import { useUserPreferences, formatCurrency } from "@/contexts/UserPreferencesContext";
 
 function formatBudget(min?: number, max?: number, currencyPref: "USD" | "INR" = "USD"): string {
   if (!min && !max) return "—";
@@ -158,7 +81,36 @@ interface RecentAnalysesProps {
 
 export function RecentAnalyses({ analyses, isLoading }: RecentAnalysesProps) {
   const { currency } = useUserPreferences();
-  const data = analyses ?? DEMO_ANALYSES;
+  const [storedAnalyses, setStoredAnalyses] = useState<AnalysisMetadata[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    if (analyses) {
+      setStoredAnalyses(analyses);
+      setIsLoaded(true);
+    } else {
+      const all = AnalysesStorage.getAll().map((a) => ({
+        id: a.id,
+        accountId: a.accountId || "local",
+        status: a.status,
+        inputType: a.inputType,
+        title: a.title,
+        recommendation: a.recommendation,
+        matchScore: a.matchScore,
+        budgetMin: a.budgetMin,
+        budgetMax: a.budgetMax,
+        currency: a.currency,
+        clientName: a.clientName,
+        createdAt: a.createdAt,
+        completedAt: a.completedAt,
+      }));
+      setStoredAnalyses(all);
+      setIsLoaded(true);
+    }
+  }, [analyses]);
+
+  const data = analyses ?? storedAnalyses;
+  const loading = isLoading ?? !isLoaded;
 
   return (
     <Card>
@@ -176,7 +128,7 @@ export function RecentAnalyses({ analyses, isLoading }: RecentAnalysesProps) {
         </Link>
       </CardHeader>
       <CardContent className="px-0 pb-0">
-        {isLoading ? (
+        {loading ? (
           <div className="px-5 pb-5 space-y-3">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="flex items-center gap-4 animate-pulse">

@@ -49,7 +49,7 @@ export default function ComingSoonPage() {
   // Using suppressHydrationWarning on a wrapper is best.
   
   return (
-    <div className="flex min-h-screen flex-col bg-[#FAFAFA] font-sans selection:bg-black/10">
+    <div className="flex min-h-screen flex-col bg-[#FDFCFB] font-sans selection:bg-black/10">
       <div className="flex flex-1 flex-col items-center justify-center px-4 py-8 text-center sm:py-12">
         
         <div className="mb-6 rounded-full border border-border/80 bg-white px-5 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground shadow-sm">
