@@ -1,5 +1,5 @@
 {
   "framework": "nextjs",
-  "buildCommand": "cd freelance-os && npm run build --workspace=freelance-os-web",
-  "outputDirectory": "freelance-os/apps/web/.next"
+  "buildCommand": "npm run build --workspace=freelance-os-web",
+  "outputDirectory": "apps/web/.next"
 }
