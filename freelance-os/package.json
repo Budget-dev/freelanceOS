@@ -13,7 +13,7 @@
     "dev": "npm run dev --workspace=freelance-os-web",
     "lint": "echo \"Linting not implemented\"",
     "test": "echo \"Testing not implemented\"",
-    "build": "echo \"Build not implemented\""
+    "build": "npm run build --workspace=freelance-os-web"
   },
   "devDependencies": {
     "postcss": "^8.5.28"
