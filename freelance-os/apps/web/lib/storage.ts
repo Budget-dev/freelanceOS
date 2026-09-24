@@ -168,6 +168,32 @@ export interface AISettings {
   riskTolerance: "strict" | "moderate" | "relaxed";
 }
 
+/**
+ * Validates that an API key matches the expected format and minimal length for its provider.
+ * Prevents UI from treating arbitrary strings longer than 8 characters as configured keys.
+ */
+export function isValidKeyFormat(
+  key: string | undefined | null,
+  provider?: "gemini" | "openai" | "anthropic"
+): boolean {
+  if (!key || typeof key !== "string") return false;
+  const trimmed = key.trim();
+  if (provider === "gemini") {
+    return trimmed.startsWith("AIza") && trimmed.length >= 35;
+  }
+  if (provider === "anthropic") {
+    return trimmed.startsWith("sk-ant-") && trimmed.length >= 30;
+  }
+  if (provider === "openai") {
+    return trimmed.startsWith("sk-") && !trimmed.startsWith("sk-ant-") && trimmed.length >= 30;
+  }
+  // If provider not specified, infer strictly
+  if (trimmed.startsWith("sk-ant-")) return trimmed.length >= 30;
+  if (trimmed.startsWith("AIza")) return trimmed.length >= 35;
+  if (trimmed.startsWith("sk-")) return trimmed.length >= 30;
+  return false;
+}
+
 export interface BillingInfo {
   plan: "starter" | "pro" | "agency";
   status: "active" | "trialing" | "canceled";
@@ -476,6 +502,10 @@ export const AISettingsStorage = {
     }
 
     return updated;
+  },
+
+  clear: (): void => {
+    saveToStorage(STORAGE_KEYS.AI_SETTINGS, DEFAULT_AI_SETTINGS);
   },
 };
 

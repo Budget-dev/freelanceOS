@@ -4,6 +4,18 @@ service cloud.firestore {
     function signedIn() {
       return request.auth != null;
     }
+
+    function isAdmin() {
+      return signedIn() && (
+        request.auth.token.role == 'super_admin' ||
+        request.auth.token.role == 'admin' ||
+        request.auth.token.role == 'support'
+      );
+    }
+
+    function isSuperAdmin() {
+      return signedIn() && request.auth.token.role == 'super_admin';
+    }
     
     function memberOf(accountId) {
       return signedIn() && exists(
@@ -11,10 +23,89 @@ service cloud.firestore {
       );
     }
 
-    // Direct user-scoped data (Personal Profile, Portfolio, Applications)
-    // Enforces strict IDOR protection: only the authenticated user can access their own document tree.
-    match /users/{userId}/{document=**} {
+    // Prohibit client-side writes to sensitive administrative & security fields
+    function modifiesSensitiveUserFields() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'role', 'status', 'subscription', 'subscriptionStatus', 'subscriptionExpiration',
+        'disabled', 'suspendedAt', 'suspendedBy', 'assignedBy', 'assignedAt',
+        'roleUpdatedAt', 'roleUpdatedBy', 'permissions', 'adminPermissions',
+        'customClaims', 'auditHistory', 'securityFlags'
+      ]);
+    }
+
+    function containsSensitiveUserFieldsOnCreate() {
+      return request.resource.data.keys().hasAny([
+        'role', 'status', 'subscription', 'subscriptionStatus', 'subscriptionExpiration',
+        'disabled', 'suspendedAt', 'suspendedBy', 'assignedBy', 'assignedAt',
+        'roleUpdatedAt', 'roleUpdatedBy', 'permissions', 'adminPermissions',
+        'customClaims', 'auditHistory', 'securityFlags'
+      ]);
+    }
+
+    // Direct User Root Document (/users/{userId})
+    // Users can read and update their own identity fields (displayName, photoURL, lastLoginAt),
+    // but CANNOT modify their role, subscription, status, or administrative permissions.
+    match /users/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow create: if signedIn() && request.auth.uid == userId && !containsSensitiveUserFieldsOnCreate();
+      allow update: if signedIn() && request.auth.uid == userId && !modifiesSensitiveUserFields();
+      allow delete: if false; // User accounts can only be deleted via server-side Admin SDK
+    }
+
+    // User Subscriptions (/users/{userId}/subscription/{doc})
+    // Read-only for the owning user. Modifiable ONLY via server-side Firebase Admin SDK.
+    match /users/{userId}/subscription/{document=**} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false; // Protected: only server-side admin endpoints can grant/extend subscriptions
+    }
+
+    // BYOK AI Credentials & Model Settings (/users/{userId}/settings/ai)
+    // Strictly private to the owning user. NEVER accessible by any other user or normal client rules.
+    match /users/{userId}/settings/ai {
       allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    // User Profile, Portfolio, and Applications subcollections
+    match /users/{userId}/profile/{document=**} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/applications/{document=**} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/portfolio/{document=**} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    // System subscription plans: authenticated users can read plans, only server Admin SDK writes
+    match /system/plans/{document=**} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // System roles & configuration: strictly server-managed
+    match /system/{document=**} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Append-only administrative audit logs
+    match /admin_audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false; // Audit logs can only be created via privileged server endpoints
+    }
+
+    // Telemetry events: strictly server-managed
+    match /telemetry_events/{eventId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Activity sessions: server-managed
+    match /activity_sessions/{sessionId} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
     
     match /accounts/{accountId}/profile/{docId} {

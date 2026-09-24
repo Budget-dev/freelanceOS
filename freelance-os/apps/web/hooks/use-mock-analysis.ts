@@ -927,19 +927,25 @@ export function useMockAnalysis() {
       setMessages((prev) => [...prev, userMsg]);
       setState("processing");
 
-      // Grab user's BYOK settings
+      // Grab user's BYOK settings and provider
       const aiSettings = AISettingsStorage.get();
       let userApiKey: string | undefined;
+      let provider: "gemini" | "anthropic" | "openai" = "openai";
+
       if (aiSettings.defaultModel === "gemini-1-5-pro") {
         userApiKey = aiSettings.geminiApiKey;
+        provider = "gemini";
       } else if (aiSettings.defaultModel === "claude-3-5-sonnet") {
         userApiKey = aiSettings.anthropicApiKey;
+        provider = "anthropic";
       } else {
         userApiKey = aiSettings.openaiApiKey;
+        provider = "openai";
       }
 
       let result: AnalysisResult | null = null;
       let projectRecord: ApplicationItem | null = null;
+      let llmErrorMsg: string | undefined;
 
       try {
         const response = await fetch("/api/analyze", {
@@ -953,6 +959,7 @@ export function useMockAnalysis() {
               previewUrl: f.previewUrl,
             })),
             userApiKey,
+            provider,
             preferredModel: aiSettings.defaultModel,
             existingProjects: ApplicationsStorage.getAll(),
           }),
@@ -960,6 +967,9 @@ export function useMockAnalysis() {
 
         if (response.ok) {
           const payload = await response.json();
+          if (payload.llmError) {
+            llmErrorMsg = payload.llmError;
+          }
           if (payload.isDuplicate && payload.project) {
             projectRecord = payload.project;
             result = payload.project.analysis ? {
@@ -1032,6 +1042,14 @@ export function useMockAnalysis() {
       // If server analysis did not return result, fall back to local NLP analysis
       if (!result) {
         result = runMockAnalysis(text, filesSnapshot);
+      }
+
+      // If user had a configured key but LLM call failed, alert user transparently
+      if (llmErrorMsg && result) {
+        result = {
+          ...result,
+          summary: `> ⚠️ **API Key Notice**: ${llmErrorMsg} Analysis completed using offline heuristic intelligence.\n\n${result.summary}`,
+        };
       }
 
       // Persist full project record to ApplicationsStorage

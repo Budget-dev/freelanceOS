@@ -11,6 +11,7 @@ import {
   UserCircle,
   ClipboardList,
   Search,
+  Shield,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import Link from "next/link";
@@ -250,6 +251,11 @@ export function Sidebar({ isMobileOpen, onMobileClose }: SidebarProps) {
                         <DropdownMenuItem asChild className="cursor-pointer">
                           <Link href="/profile" className="flex items-center gap-2" onClick={() => isMobileOpen && onMobileClose()}>
                             <UserCircle className="h-4 w-4" /> Profile
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild className="cursor-pointer">
+                          <Link href="/admin" className="flex items-center gap-2" onClick={() => isMobileOpen && onMobileClose()}>
+                            <Shield className="h-4 w-4 text-primary" /> Admin Panel
                           </Link>
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />

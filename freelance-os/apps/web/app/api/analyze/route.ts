@@ -111,6 +111,74 @@ function extractDomain(text: string): string | null {
   return null;
 }
 
+// SSRF Defense: validate that domain is a safe public FQDN, not localhost, private IP, or metadata endpoint
+function isSafePublicDomain(domain: string): boolean {
+  if (!domain || typeof domain !== "string") return false;
+  const clean = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/:\d+$/, "");
+  if (clean.length < 3 || clean.length > 253) return false;
+
+  // Block loopback, internal, and cloud metadata hostnames
+  const blockedHostnames = new Set([
+    "localhost", "localhost.localdomain", "127.0.0.1", "0.0.0.0", "::1",
+    "metadata.google.internal", "metadata", "instance-data"
+  ]);
+  if (blockedHostnames.has(clean)) return false;
+
+  // Block reserved/internal TLDs
+  if (
+    clean.endsWith(".local") ||
+    clean.endsWith(".internal") ||
+    clean.endsWith(".localhost") ||
+    clean.endsWith(".lan") ||
+    clean.endsWith(".test") ||
+    clean.endsWith(".example") ||
+    clean.endsWith(".invalid") ||
+    clean.endsWith(".onion")
+  ) {
+    return false;
+  }
+
+  // Check if it's an IP address (IPv4)
+  const ipv4Regex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+  const ipMatch = clean.match(ipv4Regex);
+  if (ipMatch) {
+    const octets = [
+      parseInt(ipMatch[1], 10),
+      parseInt(ipMatch[2], 10),
+      parseInt(ipMatch[3], 10),
+      parseInt(ipMatch[4], 10),
+    ];
+    if (octets.some((o) => o < 0 || o > 255)) return false;
+    // Loopback (127.0.0.0/8)
+    if (octets[0] === 127) return false;
+    // Zero / this host (0.0.0.0/8)
+    if (octets[0] === 0) return false;
+    // Private RFC1918: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+    if (octets[0] === 10) return false;
+    if (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) return false;
+    if (octets[0] === 192 && octets[1] === 168) return false;
+    // Link-local / Cloud metadata: 169.254.0.0/16
+    if (octets[0] === 169 && octets[1] === 254) return false;
+    // Carrier-grade NAT (100.64.0.0/10)
+    if (octets[0] === 100 && octets[1] >= 64 && octets[1] <= 127) return false;
+    // Documentation / test ranges
+    if (octets[0] === 192 && octets[1] === 0 && octets[2] === 2) return false;
+    if (octets[0] === 198 && octets[1] === 51 && octets[2] === 100) return false;
+    if (octets[0] === 203 && octets[1] === 0 && octets[2] === 113) return false;
+    // Multicast (224.0.0.0/4) and reserved (240.0.0.0/4)
+    if (octets[0] >= 224) return false;
+    // Disallow probing raw IPs directly
+    return false;
+  }
+
+  // IPv6 detection
+  if (clean.includes(":")) return false;
+
+  // Domain structure: must be valid FQDN ending in valid alphanumeric TLD (at least 2 letters)
+  const fqdnRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*\.[a-z]{2,24}$/i;
+  return fqdnRegex.test(clean);
+}
+
 // Helper for Real HTTP Domain Check & Metadata Extraction
 interface DomainProbeResult {
   verified: boolean;
@@ -123,24 +191,31 @@ interface DomainProbeResult {
 }
 
 async function verifyDomain(domain: string): Promise<DomainProbeResult> {
-  const targetUrl = `https://${domain}`;
+  if (!isSafePublicDomain(domain)) {
+    return {
+      verified: false,
+      url: "",
+      emailsFound: [],
+      phonesFound: [],
+      whatsappFound: [],
+    };
+  }
+
+  const clean = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/:\d+$/, "");
+  const targetUrl = `https://${clean}`;
   const emails: string[] = [];
   const phones: string[] = [];
   const whatsapps: string[] = [];
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
-
     const res = await fetch(targetUrl, {
       method: "GET",
-      signal: controller.signal,
+      signal: AbortSignal.timeout(3500),
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) FreelanceOS-Research/1.0",
         Accept: "text/html,application/xhtml+xml",
       },
     });
-    clearTimeout(timeoutId);
 
     if (!res.ok && res.status >= 400) {
       return {
@@ -207,25 +282,46 @@ async function verifyDomain(domain: string): Promise<DomainProbeResult> {
   }
 }
 
-// Helper to call LLM if user provided API key or environment key is present
+// Helper to call LLM using the user's own API key (BYOK)
 async function executeLLMAnalysis(
   prompt: string,
-  userApiKey?: string,
+  userApiKey?: unknown,
   preferredModel?: string,
-  base64Image?: string
-): Promise<any | null> {
-  // If Gemini key is provided
-  const geminiKey = userApiKey?.startsWith("AIza") ? userApiKey : process.env.GEMINI_API_KEY;
-  if (geminiKey) {
+  base64Image?: string,
+  preferredProvider?: string
+): Promise<{ data: any | null; error?: string }> {
+  // Validate userApiKey strictly as a non-empty string
+  if (!userApiKey || typeof userApiKey !== "string") {
+    return { data: null };
+  }
+
+  const trimmedKey = userApiKey.trim();
+  if (trimmedKey.length < 8) {
+    return { data: null };
+  }
+
+  // Determine provider: use explicit provider if allowlisted, or infer strictly
+  let provider = preferredProvider;
+  if (!provider || !["gemini", "openai", "anthropic"].includes(provider)) {
+    if (trimmedKey.startsWith("sk-ant-")) {
+      provider = "anthropic";
+    } else if (trimmedKey.startsWith("AIza")) {
+      provider = "gemini";
+    } else if (trimmedKey.startsWith("sk-")) {
+      provider = "openai";
+    }
+  }
+
+  // 1. Google Gemini (Uses secure x-goog-api-key header — NEVER ?key= in URL)
+  if (provider === "gemini") {
     try {
       const model = preferredModel?.includes("gemini") ? "gemini-1.5-pro" : "gemini-1.5-flash";
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
       const contents: any[] = [];
       const parts: any[] = [{ text: prompt }];
 
       if (base64Image) {
-        // base64Image format: data:image/png;base64,....
         const mimeMatch = base64Image.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
         if (mimeMatch) {
           parts.unshift({
@@ -241,7 +337,11 @@ async function executeLLMAnalysis(
 
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": trimmedKey,
+        },
+        signal: AbortSignal.timeout(25000),
         body: JSON.stringify({
           contents,
           generationConfig: {
@@ -255,17 +355,26 @@ async function executeLLMAnalysis(
         const data = await res.json();
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (text) {
-          return JSON.parse(text);
+          return { data: JSON.parse(text) };
         }
+      } else {
+        console.warn("Gemini API returned status:", res.status);
+        if (res.status === 400 || res.status === 401 || res.status === 403) {
+          return { data: null, error: "Invalid Gemini API key or unauthorized access." };
+        }
+        if (res.status === 429) {
+          return { data: null, error: "Gemini API quota exceeded or rate limit reached." };
+        }
+        return { data: null, error: `Gemini API returned status ${res.status}.` };
       }
-    } catch (err) {
-      console.warn("Gemini API invocation fallback:", err);
+    } catch (err: any) {
+      console.warn("Gemini API invocation failed:", err?.name || "Network error");
+      return { data: null, error: "Failed to connect to Gemini API." };
     }
   }
 
-  // If OpenAI key is provided
-  const openaiKey = userApiKey?.startsWith("sk-") ? userApiKey : process.env.OPENAI_API_KEY;
-  if (openaiKey) {
+  // 2. OpenAI
+  if (provider === "openai") {
     try {
       const endpoint = "https://api.openai.com/v1/chat/completions";
       const messages: any[] = [];
@@ -286,8 +395,9 @@ async function executeLLMAnalysis(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${openaiKey}`,
+          Authorization: `Bearer ${trimmedKey}`,
         },
+        signal: AbortSignal.timeout(25000),
         body: JSON.stringify({
           model: preferredModel?.includes("gpt") ? preferredModel : "gpt-4o",
           messages,
@@ -300,15 +410,89 @@ async function executeLLMAnalysis(
         const data = await res.json();
         const text = data.choices?.[0]?.message?.content;
         if (text) {
-          return JSON.parse(text);
+          return { data: JSON.parse(text) };
         }
+      } else {
+        console.warn("OpenAI API returned status:", res.status);
+        if (res.status === 401) {
+          return { data: null, error: "Invalid OpenAI API key." };
+        }
+        if (res.status === 429) {
+          return { data: null, error: "OpenAI API quota exceeded or rate limit reached." };
+        }
+        return { data: null, error: `OpenAI API returned status ${res.status}.` };
       }
-    } catch (err) {
-      console.warn("OpenAI API invocation fallback:", err);
+    } catch (err: any) {
+      console.warn("OpenAI API invocation failed:", err?.name || "Network error");
+      return { data: null, error: "Failed to connect to OpenAI API." };
     }
   }
 
-  return null;
+  // 3. Anthropic Claude (Uses official messages API)
+  if (provider === "anthropic") {
+    try {
+      const endpoint = "https://api.anthropic.com/v1/messages";
+      const contentParts: any[] = [];
+
+      if (base64Image) {
+        const mimeMatch = base64Image.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
+        if (mimeMatch) {
+          contentParts.push({
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: mimeMatch[1],
+              data: mimeMatch[2],
+            },
+          });
+        }
+      }
+
+      contentParts.push({
+        type: "text",
+        text: `${prompt}\n\nIMPORTANT: Respond with pure, valid JSON only. Do not enclose in markdown code fences or backticks.`,
+      });
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": trimmedKey,
+          "anthropic-version": "2023-06-01",
+        },
+        signal: AbortSignal.timeout(25000),
+        body: JSON.stringify({
+          model: preferredModel?.includes("claude") ? preferredModel : "claude-3-5-sonnet-20241022",
+          max_tokens: 4096,
+          messages: [{ role: "user", content: contentParts }],
+          temperature: 0.2,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.content?.[0]?.text;
+        if (text) {
+          const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+          return { data: JSON.parse(cleaned) };
+        }
+      } else {
+        console.warn("Anthropic API returned status:", res.status);
+        if (res.status === 401) {
+          return { data: null, error: "Invalid Anthropic API key." };
+        }
+        if (res.status === 402 || res.status === 429) {
+          return { data: null, error: "Anthropic API quota exceeded or insufficient credits." };
+        }
+        return { data: null, error: `Anthropic API returned status ${res.status}.` };
+      }
+    } catch (err: any) {
+      console.warn("Anthropic API invocation failed:", err?.name || "Network error");
+      return { data: null, error: "Failed to connect to Anthropic API." };
+    }
+  }
+
+  return { data: null, error: "Unrecognized API key format." };
 }
 
 // Resilient Heuristic NLP Entity Extractor for Freelancer.com briefs
@@ -533,6 +717,7 @@ export async function POST(req: NextRequest) {
       attachments = [],
       userApiKey,
       preferredModel,
+      provider,
       userId,
       existingProjects = [],
     } = body;
@@ -575,9 +760,12 @@ export async function POST(req: NextRequest) {
     );
     const base64Data = firstImage?.base64 || firstImage?.previewUrl;
 
-    // 1. LLM or Heuristic Extraction
+    // 1. LLM (user's own key) or Heuristic Extraction
     let extracted: any = null;
-    if (userApiKey || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY) {
+    let llmErrorMessage: string | undefined;
+    const hasUserKey = typeof userApiKey === "string" && userApiKey.trim().length > 8;
+
+    if (hasUserKey) {
       const prompt = `Analyze this Freelancer.com project brief and provide strict JSON output:
 Project Content:
 ${combinedText}
@@ -604,12 +792,18 @@ Required JSON Schema:
   "summary": "Professional executive summary of project requirements."
 }`;
 
-      extracted = await executeLLMAnalysis(
+      const llmResult = await executeLLMAnalysis(
         prompt,
         userApiKey,
-        preferredModel,
-        base64Data
+        typeof preferredModel === "string" ? preferredModel : undefined,
+        base64Data,
+        typeof provider === "string" ? provider : undefined
       );
+
+      extracted = llmResult.data;
+      if (!extracted && llmResult.error) {
+        llmErrorMessage = llmResult.error;
+      }
     }
 
     // Fall back to heuristic NLP parser if LLM wasn't available or errored
@@ -1096,6 +1290,9 @@ Senior Full-Stack Architect & Consultant`,
 
     return NextResponse.json({
       success: true,
+      usedLLM: hasUserKey && extracted !== null,
+      hasUserKey,
+      llmError: llmErrorMessage || null,
       project: fullProject,
       analysisResult: {
         id: fullProject.id,
@@ -1159,9 +1356,9 @@ Senior Full-Stack Architect & Consultant`,
       },
     });
   } catch (error: any) {
-    console.error("Analysis Pipeline Error:", error);
+    console.error("Analysis Pipeline Error:", error?.name || "Unknown error");
     return NextResponse.json(
-      { error: error?.message || "Internal server error during analysis pipeline." },
+      { error: "Internal server error during analysis pipeline." },
       { status: 500 }
     );
   }

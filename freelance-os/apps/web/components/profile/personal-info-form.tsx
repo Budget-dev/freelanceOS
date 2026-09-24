@@ -104,7 +104,7 @@ export function PersonalInfoForm() {
           const uData = userDocSnap.data();
           if (uData.geminiApiKey) {
             setGeminiApiKey(uData.geminiApiKey);
-            AISettingsStorage.save({ geminiApiKey: uData.geminiApiKey, defaultModel: "gemini-1-5-pro" });
+            AISettingsStorage.save({ geminiApiKey: uData.geminiApiKey });
           }
         }
       } catch (err) {
@@ -140,7 +140,7 @@ export function PersonalInfoForm() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
       if (geminiApiKey.trim()) {
-        AISettingsStorage.save({ geminiApiKey: geminiApiKey.trim(), defaultModel: "gemini-1-5-pro" });
+        AISettingsStorage.save({ geminiApiKey: geminiApiKey.trim() });
       }
       if (user) {
         // 1. Store detailed personal profile subdocument

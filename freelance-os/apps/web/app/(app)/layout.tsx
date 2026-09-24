@@ -33,6 +33,7 @@ import { ProtectedRoute } from "@/components/providers/ProtectedRoute";
 import { CountrySelectModal } from "@/components/onboarding/CountrySelectModal";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { AppFooter } from "@/components/layout/AppFooter";
+import { ActivityHeartbeat } from "@/components/layout/ActivityHeartbeat";
 
 /* =========================================================================
    AppLayout Component
@@ -51,6 +52,7 @@ export default function AppLayout({
   /* ── 2. RENDER ────────────────────────────────────────────────────────── */
   return (
     <ProtectedRoute>
+      <ActivityHeartbeat />
       <div className="min-h-screen bg-background flex flex-col md:flex-row text-foreground antialiased">
 
         {/* ── First-Time User Country & Currency Modal ── */}

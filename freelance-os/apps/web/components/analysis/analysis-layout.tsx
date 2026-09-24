@@ -23,8 +23,9 @@
 
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { Zap, PanelRight, PanelRightClose, BarChart3, MessageSquare } from "lucide-react";
+import React, { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
+import { Zap, PanelRight, PanelRightClose, BarChart3, MessageSquare, Key } from "lucide-react";
 
 // Subcomponents & UI Controls
 import { ChatInterface } from "@/components/analysis/chat-interface";
@@ -36,6 +37,7 @@ import { cn } from "@/lib/utils";
 // Hooks & Types
 import { useMockAnalysis } from "@/hooks/use-mock-analysis";
 import type { AnalysisResult } from "@/hooks/use-mock-analysis";
+import { AISettingsStorage, isValidKeyFormat } from "@/lib/storage";
 
 /* =========================================================================
    AnalysisLayout Component
@@ -60,6 +62,21 @@ export function AnalysisLayout() {
 
   // Controls active view tab on mobile screens ("chat" vs "card")
   const [mobileTab, setMobileTab] = useState<"chat" | "card">("chat");
+
+  // Track whether the user has a configured API key for their selected model
+  const [hasApiKey, setHasApiKey] = useState<boolean>(true); // default true to avoid flash
+  useEffect(() => {
+    const settings = AISettingsStorage.get();
+    let keyPresent = false;
+    if (settings.defaultModel === "gemini-1-5-pro") {
+      keyPresent = isValidKeyFormat(settings.geminiApiKey, "gemini");
+    } else if (settings.defaultModel === "claude-3-5-sonnet") {
+      keyPresent = isValidKeyFormat(settings.anthropicApiKey, "anthropic");
+    } else {
+      keyPresent = isValidKeyFormat(settings.openaiApiKey, "openai");
+    }
+    setHasApiKey(keyPresent);
+  }, []);
 
 
   /* ── 3. COMPUTED ANALYSIS DATA ────────────────────────────────────────── */
@@ -170,6 +187,21 @@ export function AnalysisLayout() {
         </div>
 
       </div>
+
+      {/* ── API Key Missing Banner ── */}
+      {!hasApiKey && (
+        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-amber-200 bg-amber-50/60 shrink-0">
+          <Key className="h-4 w-4 text-amber-600 shrink-0" />
+          <p className="text-[11.5px] text-amber-800 leading-snug flex-1">
+            <span className="font-semibold">No API key configured.</span>{" "}
+            Analysis will use basic heuristic parsing only. Add your own API key in{" "}
+            <Link href="/settings/ai" className="font-semibold underline underline-offset-2 hover:text-amber-900">
+              Settings → AI
+            </Link>{" "}
+            to enable full AI-powered analysis.
+          </p>
+        </div>
+      )}
 
 
       {/* ── Main Dual-Pane Responsive Layout ── */}
