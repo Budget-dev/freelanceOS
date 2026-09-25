@@ -23,6 +23,8 @@ export interface AdminPermissions {
   canViewAuditLogs: boolean;
 }
 
+const BOOTSTRAP_SUPER_ADMIN = "venkateshchop14@gmail.com";
+
 export function useAdminAuth() {
   const { user, loading: authLoading } = useAuth();
   const [adminLoading, setAdminLoading] = useState(true);
@@ -45,6 +47,26 @@ export function useAdminAuth() {
         return;
       }
 
+      // Optimistic authorization for bootstrap super admin
+      const isRootAdmin = (user.email || "").toLowerCase() === BOOTSTRAP_SUPER_ADMIN;
+      if (isRootAdmin && isMounted) {
+        setIsAdminUser(true);
+        setPermissions({
+          role: "super_admin",
+          isSuperAdmin: true,
+          isAdmin: true,
+          isSupport: true,
+          canManageUsers: true,
+          canSuspendUsers: true,
+          canManageSubscriptions: true,
+          canManagePlans: true,
+          canManageRoles: true,
+          canViewAnalytics: true,
+          canViewAuditLogs: true,
+        });
+        setError(null);
+      }
+
       try {
         const data = await adminFetch("/api/admin/auth/me");
         if (isMounted) {
@@ -52,13 +74,13 @@ export function useAdminAuth() {
             setIsAdminUser(true);
             setPermissions(data.permissions);
             setError(null);
-          } else {
+          } else if (!isRootAdmin) {
             setIsAdminUser(false);
             setPermissions(null);
           }
         }
       } catch (err: any) {
-        if (isMounted) {
+        if (isMounted && !isRootAdmin) {
           setIsAdminUser(false);
           setPermissions(null);
           setError(err.message || "Admin authorization failed");

@@ -9,7 +9,8 @@
  * - Role elevations and revocations
  */
 
-import { adminDb } from "@/lib/firebase/admin";
+import { adminDb, hasAdminCredentials } from "@/lib/firebase/admin";
+import { getCollectionDocs, setDocumentByPath } from "@/lib/firebase/firestore-rest";
 
 export type AuditAction =
   | "user.suspend"
@@ -43,21 +44,37 @@ export interface AuditLogEntry {
   ipAddress?: string;
 }
 
-export async function createAuditLog(entry: Omit<AuditLogEntry, "timestamp">): Promise<string> {
+export async function createAuditLog(
+  entry: Omit<AuditLogEntry, "timestamp">,
+  idToken?: string
+): Promise<string> {
   const timestamp = new Date().toISOString();
   const logData: AuditLogEntry = {
     ...entry,
     timestamp,
   };
 
-  try {
-    const docRef = await adminDb.collection("admin_audit_logs").add(logData);
-    return docRef.id;
-  } catch (err) {
-    console.error("[AuditService] Error writing audit log:", err);
-    // Non-blocking in dev if Firestore offline, but returns fallback ID
-    return `local_${Date.now()}`;
+  if (hasAdminCredentials()) {
+    try {
+      const docRef = await Promise.race([
+        adminDb.collection("admin_audit_logs").add(logData),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Timeout")), 2000)
+        ),
+      ]);
+      return (docRef as any).id;
+    } catch (err) {
+      console.warn("[AuditService] adminDb audit write notice:", err);
+    }
   }
+
+  if (idToken) {
+    const docId = `log_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    await setDocumentByPath(`admin_audit_logs/${docId}`, logData, idToken, false);
+    return docId;
+  }
+
+  return `local_${Date.now()}`;
 }
 
 export async function getAuditLogs(options?: {
@@ -65,19 +82,14 @@ export async function getAuditLogs(options?: {
   action?: string;
   targetUid?: string;
   adminUid?: string;
+  idToken?: string;
 }): Promise<AuditLogEntry[]> {
   try {
     const limit = Math.min(options?.limit || 50, 100);
-    const snapshot = await adminDb
-      .collection("admin_audit_logs")
-      .orderBy("timestamp", "desc")
-      .limit(200)
-      .get();
+    let logs: AuditLogEntry[] = await getCollectionDocs("admin_audit_logs", options?.idToken);
 
-    let logs = snapshot.docs.map((doc: any) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as AuditLogEntry[];
+    // Sort descending by timestamp
+    logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     if (options?.action) {
       logs = logs.filter((l) => l.action === options.action);

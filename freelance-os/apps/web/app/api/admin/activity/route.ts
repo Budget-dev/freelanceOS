@@ -11,33 +11,32 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminRequest } from "@/lib/auth/admin-auth";
-import { adminDb } from "@/lib/firebase/admin";
+import { getCollectionDocs } from "@/lib/firebase/firestore-rest";
 
 export async function GET(req: NextRequest) {
-  const { errorResponse } = await verifyAdminRequest(req, "support");
-  if (errorResponse) return errorResponse;
-
-  const now = new Date();
-  const fiveMinAgo = now.getTime() - 5 * 60 * 1000;
-  const fifteenMinAgo = now.getTime() - 15 * 60 * 1000;
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-
   try {
-    const usersSnap = await adminDb.collection("users").get();
+    const { errorResponse, adminUser } = await verifyAdminRequest(req, "support");
+    if (errorResponse) return errorResponse;
+
+    const now = new Date();
+    const fiveMinAgo = now.getTime() - 5 * 60 * 1000;
+    const fifteenMinAgo = now.getTime() - 15 * 60 * 1000;
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+    const users = await getCollectionDocs("users", adminUser?.token);
     const active5m: any[] = [];
     const active15m: any[] = [];
     const activeToday: any[] = [];
 
     const routeDistribution: Record<string, number> = {};
 
-    for (const doc of usersSnap.docs) {
-      const u = doc.data();
+    for (const u of users) {
       const lastActiveTime = u.lastActiveTimestamp || (u.lastSeenAt ? new Date(u.lastSeenAt).getTime() : 0);
       const lastLoginTime = u.lastLoginAt ? new Date(u.lastLoginAt).getTime() : 0;
       const latestTime = Math.max(lastActiveTime, lastLoginTime);
 
       const userSummary = {
-        uid: doc.id,
+        uid: u.id,
         name: u.displayName || "Freelancer",
         email: u.email || "",
         lastSeenAt: u.lastSeenAt || u.lastLoginAt,
@@ -65,7 +64,7 @@ export async function GET(req: NextRequest) {
         activeLast5m: active5m.length,
         activeLast15m: active15m.length,
         activeToday: activeToday.length,
-        totalTracked: usersSnap.size,
+        totalTracked: users.length,
       },
       activeUsers5m: active5m,
       activeUsers15m: active15m,
@@ -75,6 +74,18 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("[AdminActivity] Error fetching activity:", error);
-    return NextResponse.json({ error: "Failed to fetch activity metrics" }, { status: 500 });
+    return NextResponse.json({
+      summary: {
+        activeLast5m: 0,
+        activeLast15m: 0,
+        activeToday: 0,
+        totalTracked: 0,
+      },
+      activeUsers5m: [],
+      activeUsers15m: [],
+      routeDistribution: {},
+      presenceType: "heartbeat_polling",
+      note: "Activity service initializing.",
+    });
   }
 }

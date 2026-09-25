@@ -9,12 +9,19 @@
 "use client";
 
 import React, { useState } from "react";
+import { usePathname } from "next/navigation";
 import { AdminProtectedRoute } from "@/components/admin/AdminProtectedRoute";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const pathname = usePathname();
+
+  // The admin login portal renders full-screen without sidebar/header guard
+  if (pathname === "/admin/login") {
+    return <>{children}</>;
+  }
 
   return (
     <AdminProtectedRoute>

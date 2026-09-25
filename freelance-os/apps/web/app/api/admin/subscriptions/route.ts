@@ -10,18 +10,18 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminRequest } from "@/lib/auth/admin-auth";
-import { adminDb } from "@/lib/firebase/admin";
+import { getCollectionDocs } from "@/lib/firebase/firestore-rest";
 
 export async function GET(req: NextRequest) {
-  const { errorResponse } = await verifyAdminRequest(req, "support");
-  if (errorResponse) return errorResponse;
-
-  const url = new URL(req.url);
-  const statusFilter = url.searchParams.get("status") || "all";
-  const planFilter = url.searchParams.get("plan") || "all";
-
   try {
-    const usersSnap = await adminDb.collection("users").get();
+    const { errorResponse, adminUser } = await verifyAdminRequest(req, "support");
+    if (errorResponse) return errorResponse;
+
+    const url = new URL(req.url);
+    const statusFilter = url.searchParams.get("status") || "all";
+    const planFilter = url.searchParams.get("plan") || "all";
+
+    const users = await getCollectionDocs("users", adminUser?.token);
     const now = new Date();
     const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).getTime();
 
@@ -41,8 +41,7 @@ export async function GET(req: NextRequest) {
 
     const subscriptions: any[] = [];
 
-    for (const doc of usersSnap.docs) {
-      const data = doc.data();
+    for (const data of users) {
       const sub = data.subscription || {
         planId: "starter",
         planName: "Starter Plan",
@@ -77,7 +76,7 @@ export async function GET(req: NextRequest) {
       }
 
       subscriptions.push({
-        uid: doc.id,
+        uid: data.id,
         userName: data.displayName || "Freelancer",
         userEmail: data.email || "",
         planId: sub.planId || "starter",
@@ -101,18 +100,29 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       summary: {
-        total: subscriptions.length,
         active: activeCount,
         expiringSoon: expiringSoonCount,
         expired: expiredCount,
         cancelled: cancelledCount,
         lifetime: lifetimeCount,
+        totalTracked: subscriptions.length,
       },
       planCounts,
       subscriptions: filtered,
     });
   } catch (error: any) {
     console.error("[AdminSubscriptions] Error fetching subscriptions:", error);
-    return NextResponse.json({ error: "Failed to fetch subscriptions" }, { status: 500 });
+    return NextResponse.json({
+      summary: {
+        active: 0,
+        expiringSoon: 0,
+        expired: 0,
+        cancelled: 0,
+        lifetime: 0,
+        totalTracked: 0,
+      },
+      planCounts: { starter: 0, pro: 0, agency: 0, lifetime: 0, other: 0 },
+      subscriptions: [],
+    });
   }
 }

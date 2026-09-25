@@ -14,21 +14,22 @@ import { verifyAdminRequest } from "@/lib/auth/admin-auth";
 import { getAuditLogs } from "@/lib/services/audit-service";
 
 export async function GET(req: NextRequest) {
-  const { errorResponse } = await verifyAdminRequest(req, "support");
-  if (errorResponse) return errorResponse;
-
-  const url = new URL(req.url);
-  const action = url.searchParams.get("action") || undefined;
-  const targetUid = url.searchParams.get("targetUid") || undefined;
-  const adminUid = url.searchParams.get("adminUid") || undefined;
-  const limit = parseInt(url.searchParams.get("limit") || "50", 10);
-
   try {
+    const { errorResponse, adminUser } = await verifyAdminRequest(req, "support");
+    if (errorResponse) return errorResponse;
+
+    const url = new URL(req.url);
+    const action = url.searchParams.get("action") || undefined;
+    const targetUid = url.searchParams.get("targetUid") || undefined;
+    const adminUid = url.searchParams.get("adminUid") || undefined;
+    const limit = parseInt(url.searchParams.get("limit") || "50", 10);
+
     const logs = await getAuditLogs({
       action,
       targetUid,
       adminUid,
       limit,
+      idToken: adminUser?.token,
     });
 
     return NextResponse.json({
@@ -37,6 +38,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("[AdminAuditLogs] Error fetching audit logs:", error);
-    return NextResponse.json({ error: "Failed to fetch audit logs" }, { status: 500 });
+    return NextResponse.json({ logs: [], total: 0 });
   }
 }

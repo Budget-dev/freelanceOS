@@ -8,29 +8,28 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminRequest } from "@/lib/auth/admin-auth";
-import { adminDb } from "@/lib/firebase/admin";
+import { getCollectionDocs, getDocumentByPath } from "@/lib/firebase/firestore-rest";
 import { isValidKeyFormat } from "@/lib/storage";
 
 export async function GET(req: NextRequest) {
-  const { errorResponse } = await verifyAdminRequest(req, "support");
-  if (errorResponse) return errorResponse;
-
-  const url = new URL(req.url);
-  const page = parseInt(url.searchParams.get("page") || "1", 10);
-  const limit = Math.min(parseInt(url.searchParams.get("limit") || "10", 10), 50);
-  const search = (url.searchParams.get("search") || "").trim().toLowerCase();
-  const statusFilter = url.searchParams.get("status") || "all";
-  const planFilter = url.searchParams.get("plan") || "all";
-  const hasAiKeyFilter = url.searchParams.get("hasAiKey") || "all";
-  const sortBy = url.searchParams.get("sortBy") || "newest";
-
   try {
-    const usersSnap = await adminDb.collection("users").get();
+    const { errorResponse, adminUser } = await verifyAdminRequest(req, "support");
+    if (errorResponse) return errorResponse;
+
+    const url = new URL(req.url);
+    const page = parseInt(url.searchParams.get("page") || "1", 10);
+    const limit = Math.min(parseInt(url.searchParams.get("limit") || "10", 10), 50);
+    const search = (url.searchParams.get("search") || "").trim().toLowerCase();
+    const statusFilter = url.searchParams.get("status") || "all";
+    const planFilter = url.searchParams.get("plan") || "all";
+    const hasAiKeyFilter = url.searchParams.get("hasAiKey") || "all";
+    const sortBy = url.searchParams.get("sortBy") || "newest";
+
+    const users = await getCollectionDocs("users", adminUser?.token);
     let userList: any[] = [];
 
-    for (const doc of usersSnap.docs) {
-      const data = doc.data();
-      const uid = doc.id;
+    for (const data of users) {
+      const uid = data.id;
 
       // Check subcollection for AI settings without ever exposing keys
       let geminiConnected = isValidKeyFormat(data.geminiApiKey, "gemini");
@@ -38,9 +37,8 @@ export async function GET(req: NextRequest) {
       let anthropicConnected = false;
 
       try {
-        const aiDoc = await adminDb.collection("users").doc(uid).collection("settings").doc("ai").get();
-        if (aiDoc.exists) {
-          const aiData = aiDoc.data() || {};
+        const aiData = await getDocumentByPath(`users/${uid}/settings/ai`, adminUser?.token);
+        if (aiData) {
           if (isValidKeyFormat(aiData.geminiApiKey, "gemini")) geminiConnected = true;
           if (isValidKeyFormat(aiData.openaiApiKey, "openai")) openaiConnected = true;
           if (isValidKeyFormat(aiData.anthropicApiKey, "anthropic")) anthropicConnected = true;
@@ -53,11 +51,10 @@ export async function GET(req: NextRequest) {
       let totalProjects = 0;
       let hiredProjects = 0;
       try {
-        const appDoc = await adminDb.collection("users").doc(uid).collection("applications").doc("data").get();
-        if (appDoc.exists) {
-          const items = appDoc.data()?.items || [];
-          totalProjects = items.length;
-          hiredProjects = items.filter((i: any) => i.stage === "hired").length;
+        const appData = await getDocumentByPath(`users/${uid}/applications/data`, adminUser?.token);
+        if (appData && Array.isArray(appData.items)) {
+          totalProjects = appData.items.length;
+          hiredProjects = appData.items.filter((i: any) => i.stage === "hired").length;
         }
       } catch {
         // graceful ignore
@@ -163,6 +160,14 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("[AdminUsers] Error listing users:", error);
-    return NextResponse.json({ error: "Failed to list users" }, { status: 500 });
+    return NextResponse.json({
+      users: [],
+      pagination: {
+        page: 1,
+        limit: 10,
+        total: 0,
+        totalPages: 1,
+      },
+    });
   }
 }

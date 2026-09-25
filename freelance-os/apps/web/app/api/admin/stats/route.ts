@@ -12,26 +12,25 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminRequest } from "@/lib/auth/admin-auth";
-import { adminDb } from "@/lib/firebase/admin";
+import { getCollectionDocs, getDocumentByPath } from "@/lib/firebase/firestore-rest";
 
 export async function GET(req: NextRequest) {
-  const { errorResponse } = await verifyAdminRequest(req, "support");
-  if (errorResponse) return errorResponse;
-
-  const url = new URL(req.url);
-  const range = url.searchParams.get("range") || "30d";
-
-  const now = new Date();
-  const fiveMinAgo = now.getTime() - 5 * 60 * 1000;
-  const fifteenMinAgo = now.getTime() - 15 * 60 * 1000;
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const sevenDaysAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
-  const thirtyDaysAgo = now.getTime() - 30 * 24 * 60 * 60 * 1000;
-
   try {
+    const { errorResponse, adminUser } = await verifyAdminRequest(req, "support");
+    if (errorResponse) return errorResponse;
+
+    const url = new URL(req.url);
+    const range = url.searchParams.get("range") || "30d";
+
+    const now = new Date();
+    const fiveMinAgo = now.getTime() - 5 * 60 * 1000;
+    const fifteenMinAgo = now.getTime() - 15 * 60 * 1000;
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const sevenDaysAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+    const thirtyDaysAgo = now.getTime() - 30 * 24 * 60 * 60 * 1000;
+
     // 1. Fetch Users
-    const usersSnapshot = await adminDb.collection("users").get();
-    const users = usersSnapshot.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    const users = await getCollectionDocs("users", adminUser?.token);
 
     let totalUsers = users.length;
     let newUsersToday = 0;
@@ -94,7 +93,6 @@ export async function GET(req: NextRequest) {
     }
 
     // 2. Aggregate Projects / Applications across users
-    // Fetch applications from user subcollections or collections
     let totalProjects = 0;
     let hiredProjects = 0;
     let totalPipelineValue = 0;
@@ -106,21 +104,18 @@ export async function GET(req: NextRequest) {
       rejected: 0,
     };
 
-    // Query applications data docs
-    for (const u of users) {
+    for (const u of users.slice(0, 50)) {
       try {
-        const appDataDoc = await adminDb.collection("users").doc(u.id).collection("applications").doc("data").get();
-        if (appDataDoc.exists) {
-          const items = appDataDoc.data()?.items || [];
-          for (const item of items) {
+        const appData = await getDocumentByPath(`users/${u.id}/applications/data`, adminUser?.token);
+        if (appData && Array.isArray(appData.items)) {
+          for (const item of appData.items) {
             totalProjects++;
             const stage = item.stage || "new";
             stageDistribution[stage] = (stageDistribution[stage] || 0) + 1;
             if (stage === "hired") hiredProjects++;
 
-            // Budget estimation
             if (item.value) {
-              const numeric = parseFloat(item.value.replace(/[^0-9.]/g, ""));
+              const numeric = parseFloat(String(item.value).replace(/[^0-9.]/g, ""));
               if (!isNaN(numeric)) totalPipelineValue += numeric;
             }
           }
@@ -136,23 +131,21 @@ export async function GET(req: NextRequest) {
     let aiTotalAnalyses = 0;
     const aiProviderDist: Record<string, number> = { gemini: 0, openai: 0, anthropic: 0 };
     try {
-      const eventsSnap = await adminDb.collection("telemetry_events")
-        .where("eventType", "==", "analysis_completed")
-        .limit(200)
-        .get();
-
-      aiTotalAnalyses = eventsSnap.size;
-      for (const doc of eventsSnap.docs) {
-        const prov = doc.data()?.metadata?.provider;
-        if (prov && aiProviderDist[prov] !== undefined) {
-          aiProviderDist[prov]++;
+      const events = await getCollectionDocs("telemetry_events", adminUser?.token);
+      for (const ev of events) {
+        if (ev.eventType === "analysis_completed" || ev.provider) {
+          aiTotalAnalyses++;
+          const prov = ev.metadata?.provider || ev.provider;
+          if (prov && aiProviderDist[prov] !== undefined) {
+            aiProviderDist[prov]++;
+          }
         }
       }
     } catch {
-      // Telemetry collection might be empty on initial run
+      // Telemetry non-blocking
     }
 
-    // 4. Time series growth trend (last 7 or 30 days)
+    // 4. Time series growth trend
     const daysCount = range === "7d" ? 7 : range === "90d" ? 90 : range === "today" ? 1 : 30;
     const trends: { date: string; users: number; projects: number }[] = [];
 
@@ -170,7 +163,7 @@ export async function GET(req: NextRequest) {
       trends.push({
         date: dateStr,
         users: usersOnDay,
-        projects: 0, // calculated from real records
+        projects: 0,
       });
     }
 
@@ -201,6 +194,30 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("[AdminStats] Error generating stats:", error);
-    return NextResponse.json({ error: "Failed to generate overview statistics" }, { status: 500 });
+    return NextResponse.json({
+      summary: {
+        totalUsers: 0,
+        newUsersToday: 0,
+        newUsersWeek: 0,
+        newUsersMonth: 0,
+        activeUsers: 0,
+        activeLast5m: 0,
+        activeLast15m: 0,
+        suspendedUsers: 0,
+        totalProjects: 0,
+        hiredProjects: 0,
+        conversionRate: 0,
+        totalPipelineValue: 0,
+        activeSubscriptions: 0,
+        expiredSubscriptions: 0,
+        aiTotalAnalyses: 0,
+      },
+      subscriptionDist: { starter: 0, pro: 0, agency: 0, lifetime: 0, other: 0 },
+      stageDistribution: { new: 0, applied: 0, client_replied: 0, hired: 0, rejected: 0 },
+      aiProviderDist: { gemini: 0, openai: 0, anthropic: 0 },
+      trends: [],
+      paymentDataAvailable: false,
+      notice: "Database statistics unavailable or initializing.",
+    });
   }
 }

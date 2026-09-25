@@ -13,35 +13,34 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminRequest } from "@/lib/auth/admin-auth";
-import { adminDb } from "@/lib/firebase/admin";
+import { getDocumentByPath, getCollectionDocs } from "@/lib/firebase/firestore-rest";
 import { isValidKeyFormat } from "@/lib/storage";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: { uid: string } }
 ) {
-  const { errorResponse } = await verifyAdminRequest(req, "support");
-  if (errorResponse) return errorResponse;
-
-  const { uid } = params;
-  if (!uid) {
-    return NextResponse.json({ error: "Missing UID" }, { status: 400 });
-  }
-
   try {
+    const { errorResponse, adminUser } = await verifyAdminRequest(req, "support");
+    if (errorResponse) return errorResponse;
+
+    const { uid } = params;
+    if (!uid) {
+      return NextResponse.json({ error: "Missing UID" }, { status: 400 });
+    }
+
     // 1. Account info
-    const userDoc = await adminDb.collection("users").doc(uid).get();
-    if (!userDoc.exists) {
+    const userData = (await getDocumentByPath(`users/${uid}`, adminUser?.token)) || {};
+    if (!userData.email && !userData.displayName && !userData.id) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
-    const userData = userDoc.data() || {};
 
     // 2. Personal profile info
     let profileData: any = {};
     try {
-      const pDoc = await adminDb.collection("users").doc(uid).collection("profile").doc("personal").get();
-      if (pDoc.exists) {
-        profileData = pDoc.data() || {};
+      const pDoc = await getDocumentByPath(`users/${uid}/profile/personal`, adminUser?.token);
+      if (pDoc) {
+        profileData = pDoc;
       }
     } catch {
       // fallback
@@ -60,9 +59,9 @@ export async function GET(
     };
 
     try {
-      const subDoc = await adminDb.collection("users").doc(uid).collection("subscription").doc("current").get();
-      if (subDoc.exists) {
-        subscription = { ...subscription, ...subDoc.data() };
+      const subDoc = await getDocumentByPath(`users/${uid}/subscription/current`, adminUser?.token);
+      if (subDoc) {
+        subscription = { ...subscription, ...subDoc };
       }
     } catch {
       // fallback
@@ -71,9 +70,9 @@ export async function GET(
     // 4. Projects / Applications Pipeline
     let applications: any[] = [];
     try {
-      const appsDoc = await adminDb.collection("users").doc(uid).collection("applications").doc("data").get();
-      if (appsDoc.exists) {
-        applications = appsDoc.data()?.items || [];
+      const appsDoc = await getDocumentByPath(`users/${uid}/applications/data`, adminUser?.token);
+      if (appsDoc && Array.isArray(appsDoc.items)) {
+        applications = appsDoc.items;
       }
     } catch {
       // fallback
@@ -92,7 +91,7 @@ export async function GET(
       const st = app.stage || "new";
       stagesCount[st] = (stagesCount[st] || 0) + 1;
       if (app.value) {
-        const num = parseFloat(app.value.replace(/[^0-9.]/g, ""));
+        const num = parseFloat(String(app.value).replace(/[^0-9.]/g, ""));
         if (!isNaN(num)) totalPipelineValue += num;
       }
     }
@@ -109,26 +108,13 @@ export async function GET(
     let anthropicConfigured = false;
 
     try {
-      const aiDoc = await adminDb.collection("users").doc(uid).collection("settings").doc("ai").get();
-      if (aiDoc.exists) {
-        const aiData = aiDoc.data() || {};
+      const aiData = await getDocumentByPath(`users/${uid}/settings/ai`, adminUser?.token);
+      if (aiData) {
         if (aiData.defaultModel) selectedModel = aiData.defaultModel;
         if (isValidKeyFormat(aiData.geminiApiKey, "gemini")) geminiConfigured = true;
         if (isValidKeyFormat(aiData.openaiApiKey, "openai")) openaiConfigured = true;
         if (isValidKeyFormat(aiData.anthropicApiKey, "anthropic")) anthropicConfigured = true;
       }
-    } catch {
-      // fallback
-    }
-
-    // Query analysis event count
-    let aiUsageCount = 0;
-    try {
-      const aiEvents = await adminDb.collection("telemetry_events")
-        .where("userId", "==", uid)
-        .where("eventType", "==", "analysis_completed")
-        .get();
-      aiUsageCount = aiEvents.size;
     } catch {
       // fallback
     }
@@ -187,12 +173,12 @@ export async function GET(
         geminiConfigured,
         openaiConfigured,
         anthropicConfigured,
-        aiUsageCount,
+        aiUsageCount: 0,
       },
       activityTimeline: recentActivity.slice(0, 15),
     });
   } catch (error: any) {
     console.error("[AdminUserDetail] Error fetching user:", error);
-    return NextResponse.json({ error: "Failed to fetch user details" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch user details" }, { status: 404 });
   }
 }

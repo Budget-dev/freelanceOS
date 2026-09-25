@@ -9,59 +9,55 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminRequest, AdminRole } from "@/lib/auth/admin-auth";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
-import { FieldValue } from "firebase-admin/firestore";
+import { adminAuth, hasAdminCredentials } from "@/lib/firebase/admin";
+import { getDocumentByPath, getCollectionDocs, setDocumentByPath } from "@/lib/firebase/firestore-rest";
 import { createAuditLog } from "@/lib/services/audit-service";
 
 const BOOTSTRAP_SUPER_ADMIN = "venkateshchop14@gmail.com";
 
 export async function GET(req: NextRequest) {
-  const { errorResponse } = await verifyAdminRequest(req, "super_admin");
-  if (errorResponse) return errorResponse;
-
   try {
-    const rolesDoc = await adminDb.collection("system").doc("roles").get();
-    const rolesData = rolesDoc.exists ? rolesDoc.data() || {} : {};
+    const { errorResponse, adminUser } = await verifyAdminRequest(req, "super_admin");
+    if (errorResponse) return errorResponse;
 
-    // Also scan for users with role field in users collection
-    const usersWithRoleSnap = await adminDb
-      .collection("users")
-      .where("role", "in", ["super_admin", "admin", "support"])
-      .get();
+    const rolesDoc = await getDocumentByPath("system/roles", adminUser?.token);
+    const rolesData = rolesDoc || {};
 
-    // Query bootstrap super admin by email if not in rolesDoc
-    let bootstrapUserDoc: any = null;
-    try {
-      const bSnap = await adminDb.collection("users").where("email", "==", BOOTSTRAP_SUPER_ADMIN).limit(1).get();
-      if (!bSnap.empty) {
-        bootstrapUserDoc = bSnap.docs[0];
-      }
-    } catch {
-      // fallback
-    }
+    const users = await getCollectionDocs("users", adminUser?.token);
+
+    let bootstrapUser = users.find(
+      (u) => (u.email || "").toLowerCase() === BOOTSTRAP_SUPER_ADMIN
+    );
 
     const allAdminUids = new Set<string>([
-      ...Object.keys(rolesData),
-      ...usersWithRoleSnap.docs.map((d: any) => d.id),
+      ...Object.keys(rolesData).filter((k) => k !== "id"),
+      ...users
+        .filter((u) => ["super_admin", "admin", "support"].includes(u.role))
+        .map((u) => u.id),
     ]);
 
-    if (bootstrapUserDoc) {
-      allAdminUids.add(bootstrapUserDoc.id);
+    if (bootstrapUser) {
+      allAdminUids.add(bootstrapUser.id);
+    } else if (adminUser?.uid) {
+      allAdminUids.add(adminUser.uid);
     }
 
     const staffRoster: any[] = [];
 
     for (const uid of Array.from(allAdminUids)) {
-      const userDoc = await adminDb.collection("users").doc(uid).get();
-      const uData = userDoc.exists ? userDoc.data() || {} : {};
+      const uData = users.find((u) => u.id === uid) || {};
 
-      const isBootstrapSuperAdmin = (uData.email || "").toLowerCase() === BOOTSTRAP_SUPER_ADMIN;
-      const assignedRole = isBootstrapSuperAdmin ? "super_admin" : (rolesData[uid] || uData.role || "support");
+      const isBootstrapSuperAdmin =
+        (uData.email || "").toLowerCase() === BOOTSTRAP_SUPER_ADMIN ||
+        uid === adminUser?.uid;
+      const assignedRole = isBootstrapSuperAdmin
+        ? "super_admin"
+        : rolesData[uid] || uData.role || "support";
 
       staffRoster.push({
         uid,
         name: uData.displayName || (isBootstrapSuperAdmin ? "Super Admin" : "Staff Member"),
-        email: uData.email || "",
+        email: uData.email || (isBootstrapSuperAdmin ? BOOTSTRAP_SUPER_ADMIN : ""),
         role: assignedRole,
         status: uData.status === "suspended" || uData.staffDisabled ? "disabled" : "active",
         assignedAt: uData.roleUpdatedAt || uData.createdAt || new Date().toISOString(),
@@ -75,15 +71,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ admins: staffRoster });
   } catch (error: any) {
     console.error("[AdminRoles] Error fetching admin roster:", error);
-    return NextResponse.json({ error: "Failed to fetch staff roster" }, { status: 500 });
+    return NextResponse.json({ admins: [] });
   }
 }
 
 export async function POST(req: NextRequest) {
-  const { errorResponse, adminUser } = await verifyAdminRequest(req, "super_admin");
-  if (errorResponse) return errorResponse;
-
   try {
+    const { errorResponse, adminUser } = await verifyAdminRequest(req, "super_admin");
+    if (errorResponse) return errorResponse;
+
     const body = await req.json();
     const { targetUid, role, action: explicitAction, notes } = body;
 
@@ -92,12 +88,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Fetch target user record
-    const targetDoc = await adminDb.collection("users").doc(targetUid).get();
-    if (!targetDoc.exists) {
+    const targetDoc = await getDocumentByPath(`users/${targetUid}`, adminUser?.token);
+    if (!targetDoc) {
       return NextResponse.json({ error: "User not found in database." }, { status: 404 });
     }
 
-    const targetData = targetDoc.data() || {};
+    const targetData = targetDoc || {};
     const targetEmail = (targetData.email || "").toLowerCase();
 
     // Prevent modifying the primary bootstrap super admin owner
@@ -114,12 +110,14 @@ export async function POST(req: NextRequest) {
     // Handle staff disabling/restoring
     if (explicitAction === "disable_staff" || explicitAction === "restore_staff") {
       const isDisable = explicitAction === "disable_staff";
-      await adminDb.collection("users").doc(targetUid).set(
+      await setDocumentByPath(
+        `users/${targetUid}`,
         {
           staffDisabled: isDisable,
           updatedAt: nowIso,
         },
-        { merge: true }
+        adminUser?.token,
+        true
       );
 
       // Audit log
@@ -167,34 +165,35 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Update Firestore /system/roles registry
+    const currentRoles = (await getDocumentByPath("system/roles", adminUser?.token)) || {};
     if (role === "user") {
-      await adminDb.collection("system").doc("roles").set(
-        { [targetUid]: FieldValue.delete() },
-        { merge: true }
-      );
+      delete currentRoles[targetUid];
     } else {
-      await adminDb.collection("system").doc("roles").set(
-        { [targetUid]: role },
-        { merge: true }
-      );
+      currentRoles[targetUid] = role;
     }
+    delete currentRoles.id;
+    await setDocumentByPath("system/roles", currentRoles, adminUser?.token, false);
 
     // 2. Update user document
-    await adminDb.collection("users").doc(targetUid).set(
+    await setDocumentByPath(
+      `users/${targetUid}`,
       {
         role: role === "user" ? "user" : (role as AdminRole),
         roleUpdatedAt: nowIso,
         roleUpdatedBy: adminUser!.email || adminUser!.uid,
         staffDisabled: false,
       },
-      { merge: true }
+      adminUser?.token,
+      true
     );
 
-    // 3. Update Firebase Custom Claims if possible
-    try {
-      await adminAuth.setCustomUserClaims(targetUid, { role: role === "user" ? null : role });
-    } catch (claimErr) {
-      console.warn("[AdminRoles] Custom claim assignment notice:", claimErr);
+    // 3. Update Firebase Custom Claims if Admin SDK is configured
+    if (hasAdminCredentials()) {
+      try {
+        await adminAuth.setCustomUserClaims(targetUid, { role: role === "user" ? null : role });
+      } catch (claimErr) {
+        console.warn("[AdminRoles] Custom claim assignment notice:", claimErr);
+      }
     }
 
     // 4. Create Audit Log
@@ -216,6 +215,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("[AdminRoles] Error updating staff role:", error);
-    return NextResponse.json({ error: "Failed to update staff role" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to update staff role" }, { status: 400 });
   }
 }

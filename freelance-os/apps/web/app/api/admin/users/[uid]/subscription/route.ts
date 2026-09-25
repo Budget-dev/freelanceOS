@@ -15,20 +15,20 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminRequest } from "@/lib/auth/admin-auth";
-import { adminDb } from "@/lib/firebase/admin";
+import { getDocumentByPath, setDocumentByPath } from "@/lib/firebase/firestore-rest";
 import { createAuditLog } from "@/lib/services/audit-service";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: { uid: string } }
 ) {
-  const { errorResponse, adminUser } = await verifyAdminRequest(req, "admin");
-  if (errorResponse) return errorResponse;
-
-  const { uid } = params;
-  if (!uid) return NextResponse.json({ error: "Missing UID" }, { status: 400 });
-
   try {
+    const { errorResponse, adminUser } = await verifyAdminRequest(req, "admin");
+    if (errorResponse) return errorResponse;
+
+    const { uid } = params;
+    if (!uid) return NextResponse.json({ error: "Missing UID" }, { status: 400 });
+
     const body = await req.json();
     const action = body.action as "assign" | "extend" | "cancel" | "restore" | "lifetime" | "update_notes";
 
@@ -37,12 +37,7 @@ export async function POST(
     }
 
     // 1. Get user and current subscription
-    const userDoc = await adminDb.collection("users").doc(uid).get();
-    if (!userDoc.exists) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    const userData = userDoc.data() || {};
+    const userData = (await getDocumentByPath(`users/${uid}`, adminUser?.token)) || {};
     const previousSub = userData.subscription || {
       planId: "starter",
       planName: "Starter Plan",
@@ -153,17 +148,21 @@ export async function POST(
     }
 
     // 2. Persist to Firestore
-    await adminDb.collection("users").doc(uid).set(
+    await setDocumentByPath(
+      `users/${uid}`,
       {
         subscription: updatedSub,
         updatedAt: nowIso,
       },
-      { merge: true }
+      adminUser?.token,
+      true
     );
 
-    await adminDb.collection("users").doc(uid).collection("subscription").doc("current").set(
+    await setDocumentByPath(
+      `users/${uid}/subscription/current`,
       updatedSub,
-      { merge: true }
+      adminUser?.token,
+      true
     );
 
     // 3. Create Audit Log
@@ -176,7 +175,7 @@ export async function POST(
       previousState: previousSub,
       newState: updatedSub,
       details: `Subscription action: ${action} on user ${uid}`,
-    });
+    }, adminUser?.token);
 
     return NextResponse.json({
       success: true,
@@ -184,6 +183,6 @@ export async function POST(
     });
   } catch (error: any) {
     console.error("[AdminSubscription] Error modifying subscription:", error);
-    return NextResponse.json({ error: "Failed to update subscription" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to update subscription" }, { status: 400 });
   }
 }
