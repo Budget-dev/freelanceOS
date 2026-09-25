@@ -1,0 +1,189 @@
+[
+  {
+    "uid": "J8mHOrKVw9SYt8KGE5ufam8zLgf2",
+    "email": "venkateshchop14@gmail.com",
+    "displayName": "Venkatesh Choppa",
+    "photoURL": null,
+    "createdAt": "2026-09-22T00:00:00.000Z",
+    "lastLoginAt": "2026-09-25T05:08:00.000Z",
+    "lastSeenAt": "2026-09-25T05:08:00.000Z",
+    "status": "active",
+    "role": "super_admin",
+    "subscription": {
+      "planId": "starter",
+      "planName": "Starter Plan",
+      "status": "active",
+      "expiresAt": null
+    }
+  },
+  {
+    "uid": "6Rx3PKnpV1PzkVc7UWqGJHi2VY2",
+    "email": "codebyvenky@gmail.com",
+    "displayName": "Code by venky",
+    "photoURL": null,
+    "createdAt": "2026-09-23T00:00:00.000Z",
+    "lastLoginAt": "2026-09-25T03:47:00.000Z",
+    "lastSeenAt": "2026-09-25T03:47:00.000Z",
+    "status": "active",
+    "role": "user",
+    "subscription": {
+      "planId": "starter",
+      "planName": "Starter Plan",
+      "status": "active",
+      "expiresAt": null
+    }
+  },
+  {
+    "uid": "ae4n8S6Tgu0QNEs61xVOV8TPCL11",
+    "email": "personalstoragevenky@gmail.com",
+    "displayName": "Personalstorage",
+    "photoURL": null,
+    "createdAt": "2026-09-25T00:00:00.000Z",
+    "lastLoginAt": "2026-09-25T03:08:00.000Z",
+    "lastSeenAt": "2026-09-25T03:08:00.000Z",
+    "status": "active",
+    "role": "user",
+    "subscription": {
+      "planId": "starter",
+      "planName": "Starter Plan",
+      "status": "active",
+      "expiresAt": null
+    }
+  },
+  {
+    "uid": "BTSbFbN3iHXrejCL3FcLJam0001",
+    "email": "parnikag0715@gmail.com",
+    "displayName": "Parnika G",
+    "photoURL": null,
+    "createdAt": "2026-09-23T00:00:00.000Z",
+    "lastLoginAt": "2026-09-23T00:00:00.000Z",
+    "lastSeenAt": "2026-09-23T00:00:00.000Z",
+    "status": "active",
+    "role": "user",
+    "subscription": {
+      "planId": "starter",
+      "planName": "Starter Plan",
+      "status": "active",
+      "expiresAt": null
+    }
+  },
+  {
+    "uid": "dSV2Yz1T7jdWZsBgFPhus0yli001",
+    "email": "madhurimadhu039@gmail.com",
+    "displayName": "Madhuri Madhu",
+    "photoURL": null,
+    "createdAt": "2026-09-23T00:00:00.000Z",
+    "lastLoginAt": "2026-09-23T00:00:00.000Z",
+    "lastSeenAt": "2026-09-23T00:00:00.000Z",
+    "status": "active",
+    "role": "user",
+    "subscription": {
+      "planId": "starter",
+      "planName": "Starter Plan",
+      "status": "active",
+      "expiresAt": null
+    }
+  },
+  {
+    "uid": "rWeQduIw38hK34F17cFfKvy00001",
+    "email": "bojanapugiribabu789@gmail.com",
+    "displayName": "Bojanapu Giribabu",
+    "photoURL": null,
+    "createdAt": "2026-09-23T00:00:00.000Z",
+    "lastLoginAt": "2026-09-23T00:00:00.000Z",
+    "lastSeenAt": "2026-09-23T00:00:00.000Z",
+    "status": "active",
+    "role": "user",
+    "subscription": {
+      "planId": "starter",
+      "planName": "Starter Plan",
+      "status": "active",
+      "expiresAt": null
+    }
+  },
+  {
+    "uid": "lNn8Vvv26mPUEXBYH98oLH000001",
+    "email": "pawania69@gmail.com",
+    "displayName": "Pawani A",
+    "photoURL": null,
+    "createdAt": "2026-09-23T00:00:00.000Z",
+    "lastLoginAt": "2026-09-23T00:00:00.000Z",
+    "lastSeenAt": "2026-09-23T00:00:00.000Z",
+    "status": "active",
+    "role": "user",
+    "subscription": {
+      "planId": "starter",
+      "planName": "Starter Plan",
+      "status": "active",
+      "expiresAt": null
+    }
+  },
+  {
+    "uid": "UZmS9JOUETTK9dJp8sSdv0000001",
+    "email": "shaikshadaab951@gmail.com",
+    "displayName": "Shaik Shadaab",
+    "photoURL": null,
+    "createdAt": "2026-09-23T00:00:00.000Z",
+    "lastLoginAt": "2026-09-23T00:00:00.000Z",
+    "lastSeenAt": "2026-09-23T00:00:00.000Z",
+    "status": "active",
+    "role": "user",
+    "subscription": {
+      "planId": "starter",
+      "planName": "Starter Plan",
+      "status": "active",
+      "expiresAt": null
+    }
+  },
+  {
+    "uid": "UR7XkNOvFVNRi8KfBEKvt5l00001",
+    "email": "reddynivas53@gmail.com",
+    "displayName": "Reddy Nivas",
+    "photoURL": null,
+    "createdAt": "2026-09-23T00:00:00.000Z",
+    "lastLoginAt": "2026-09-23T00:00:00.000Z",
+    "lastSeenAt": "2026-09-23T00:00:00.000Z",
+    "status": "active",
+    "role": "user",
+    "subscription": {
+      "planId": "starter",
+      "planName": "Starter Plan",
+      "status": "active",
+      "expiresAt": null
+    }
+  },
+  {
+    "uid": "hNpQ0PxiOlMXhJ1rJHGKn6c00001",
+    "email": "bhanuroxx45@gmail.com",
+    "displayName": "Bhanu Roxx",
+    "photoURL": null,
+    "createdAt": "2026-09-23T00:00:00.000Z",
+    "lastLoginAt": "2026-09-23T00:00:00.000Z",
+    "lastSeenAt": "2026-09-23T00:00:00.000Z",
+    "status": "active",
+    "role": "user",
+    "subscription": {
+      "planId": "starter",
+      "planName": "Starter Plan",
+      "status": "active",
+      "expiresAt": null
+    }
+  },
+  {
+    "uid": "Xea8NkMuwyOP65uJfLENS3000001",
+    "email": "karthikcarsbest@gmail.com",
+    "displayName": "Karthik Cars Best",
+    "photoURL": null,
+    "createdAt": "2026-07-23T00:00:00.000Z",
+    "lastLoginAt": "2026-07-24T00:00:00.000Z",
+    "lastSeenAt": "2026-07-24T00:00:00.000Z",
+    "status": "active",
+    "role": "user",
+    "subscription": {
+      "planId": "starter",
+      "planName": "Starter Plan",
+      "status": "active",
+      "expiresAt": null
+    }
+  }
+]

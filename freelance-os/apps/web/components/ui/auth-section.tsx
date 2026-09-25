@@ -11,7 +11,8 @@ import {
   GoogleAuthProvider,
   updateProfile,
 } from "firebase/auth";
-import { auth } from "@/lib/firebase/config";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase/config";
 
 export function AuthSectionTwo({ isLogin = false }: { isLogin?: boolean }) {
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
@@ -117,6 +118,46 @@ function AuthForm({ isLogin }: { isLogin: boolean }) {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const syncUserToFirestore = async (user: any, customDisplayName?: string) => {
+    try {
+      const userDocRef = doc(db, "users", user.uid);
+      const snap = await getDoc(userDocRef);
+      const nowIso = new Date().toISOString();
+      const displayName = customDisplayName || user.displayName || user.email?.split("@")[0] || "Freelancer";
+
+      if (!snap.exists()) {
+        await setDoc(userDocRef, {
+          uid: user.uid,
+          email: user.email || "",
+          displayName,
+          photoURL: user.photoURL || null,
+          createdAt: user.metadata?.creationTime || nowIso,
+          lastLoginAt: nowIso,
+          lastSeenAt: nowIso,
+          lastActiveTimestamp: Date.now(),
+          status: "active",
+          role: "user",
+          subscription: {
+            planId: "starter",
+            planName: "Starter Plan",
+            status: "active",
+            expiresAt: null,
+          },
+        }, { merge: true });
+      } else {
+        await setDoc(userDocRef, {
+          lastLoginAt: nowIso,
+          lastSeenAt: nowIso,
+          lastActiveTimestamp: Date.now(),
+          ...(user.email ? { email: user.email } : {}),
+          ...(customDisplayName ? { displayName: customDisplayName } : {}),
+        }, { merge: true });
+      }
+    } catch (syncErr) {
+      console.warn("[AuthSection] Firestore immediate sync failed:", syncErr);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -125,7 +166,10 @@ function AuthForm({ isLogin }: { isLogin: boolean }) {
     try {
       if (isLogin) {
         try {
-          await signInWithEmailAndPassword(auth, email.trim(), password);
+          const userCred = await signInWithEmailAndPassword(auth, email.trim(), password);
+          if (userCred.user) {
+            await syncUserToFirestore(userCred.user);
+          }
         } catch (loginErr: any) {
           const code = loginErr?.code;
           // If no account exists for this email, automatically create account and sign them up!
@@ -142,6 +186,7 @@ function AuthForm({ isLogin }: { isLogin: boolean }) {
                 } catch {
                   // non-fatal
                 }
+                await syncUserToFirestore(userCred.user, defaultName);
               }
               router.push(redirectTarget);
               return;
@@ -162,13 +207,14 @@ function AuthForm({ isLogin }: { isLogin: boolean }) {
         }
       } else {
         const userCred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        const displayName = `${firstName.trim()} ${lastName.trim()}`.trim();
-        if (displayName && userCred.user) {
+        const displayName = `${firstName.trim()} ${lastName.trim()}`.trim() || email.trim().split("@")[0] || "Freelancer";
+        if (userCred.user) {
           try {
             await updateProfile(userCred.user, { displayName });
           } catch {
             // non-fatal
           }
+          await syncUserToFirestore(userCred.user, displayName);
         }
       }
       router.push(redirectTarget);
@@ -184,7 +230,10 @@ function AuthForm({ isLogin }: { isLogin: boolean }) {
     setGoogleLoading(true);
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const userCred = await signInWithPopup(auth, provider);
+      if (userCred.user) {
+        await syncUserToFirestore(userCred.user);
+      }
       router.push(redirectTarget);
     } catch (err: any) {
       setError(formatAuthError(err));

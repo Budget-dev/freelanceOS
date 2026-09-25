@@ -40,6 +40,9 @@ function initializeFirebaseAdmin(): App {
         const decoded = Buffer.from(rawServiceAccount, "base64").toString("utf8");
         parsedKey = JSON.parse(decoded);
       }
+      if (parsedKey.private_key && typeof parsedKey.private_key === "string") {
+        parsedKey.private_key = parsedKey.private_key.replace(/\\n/g, "\n");
+      }
       return initializeApp({
         credential: cert(parsedKey),
         projectId: parsedKey.project_id || projectId,

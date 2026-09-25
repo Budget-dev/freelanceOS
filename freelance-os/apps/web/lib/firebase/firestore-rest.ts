@@ -98,7 +98,7 @@ export async function getCollectionDocs(collectionPath: string, idToken?: string
           headers: {
             Authorization: `Bearer ${idToken}`,
           },
-          signal: AbortSignal.timeout(2000),
+          signal: AbortSignal.timeout(8000),
         }
       );
       if (res.ok) {
@@ -125,7 +125,7 @@ export async function getDocumentByPath(docPath: string, idToken?: string): Prom
       const doc = await Promise.race([
         adminDb.doc(docPath).get(),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("AdminDb timeout")), 2000)
+          setTimeout(() => reject(new Error("AdminDb timeout")), 3000)
         ),
       ]);
       if ((doc as any).exists) {
@@ -145,7 +145,7 @@ export async function getDocumentByPath(docPath: string, idToken?: string): Prom
           headers: {
             Authorization: `Bearer ${idToken}`,
           },
-          signal: AbortSignal.timeout(2000),
+          signal: AbortSignal.timeout(6000),
         }
       );
       if (res.ok) {
@@ -186,19 +186,22 @@ export async function setDocumentByPath(
   if (idToken) {
     try {
       const fields = toFirestoreFields(data);
-      // Using PATCH to upsert document
-      const res = await fetch(
-        `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${docPath}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${idToken}`,
-          },
-          body: JSON.stringify({ fields }),
-          signal: AbortSignal.timeout(2000),
-        }
-      );
+      const updateMaskParams = Object.keys(data)
+        .map((k) => `updateMask.fieldPaths=${encodeURIComponent(k)}`)
+        .join("&");
+      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${docPath}${
+        updateMaskParams ? `?${updateMaskParams}` : ""
+      }`;
+
+      const res = await fetch(url, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ fields }),
+        signal: AbortSignal.timeout(8000),
+      });
       return res.ok;
     } catch (restErr) {
       console.warn(`[FirestoreSafe] REST setDoc ${docPath} error:`, restErr);

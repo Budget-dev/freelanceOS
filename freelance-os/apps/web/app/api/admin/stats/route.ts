@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminRequest } from "@/lib/auth/admin-auth";
 import { getCollectionDocs, getDocumentByPath } from "@/lib/firebase/firestore-rest";
+import { adminAuth, hasAdminCredentials } from "@/lib/firebase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,32 @@ export async function GET(req: NextRequest) {
     const thirtyDaysAgo = now.getTime() - 30 * 24 * 60 * 60 * 1000;
 
     // 1. Fetch Users
-    const users = await getCollectionDocs("users", adminUser?.token);
+    const firestoreUsers = await getCollectionDocs("users", adminUser?.token);
+    const userMap = new Map<string, any>();
+    for (const u of firestoreUsers) {
+      userMap.set(u.id || u.uid, u);
+    }
+
+    if (hasAdminCredentials()) {
+      try {
+        const authUserList = await adminAuth.listUsers(1000);
+        for (const authUser of authUserList.users) {
+          if (!userMap.has(authUser.uid)) {
+            userMap.set(authUser.uid, {
+              id: authUser.uid,
+              uid: authUser.uid,
+              email: authUser.email,
+              createdAt: authUser.metadata.creationTime,
+              lastLoginAt: authUser.metadata.lastSignInTime,
+              status: authUser.disabled ? "suspended" : "active",
+            });
+          }
+        }
+      } catch (authErr) {
+        console.warn("[AdminStats] Auth listUsers failed:", authErr);
+      }
+    }
+    const users = Array.from(userMap.values());
 
     let totalUsers = users.length;
     let newUsersToday = 0;
