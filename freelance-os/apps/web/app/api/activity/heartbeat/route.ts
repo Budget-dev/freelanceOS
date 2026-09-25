@@ -14,6 +14,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { verifyFirebaseToken } from "@/lib/auth/admin-auth";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get("authorization");

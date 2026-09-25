@@ -11,6 +11,8 @@ import { verifyAdminRequest } from "@/lib/auth/admin-auth";
 import { getCollectionDocs, getDocumentByPath } from "@/lib/firebase/firestore-rest";
 import { isValidKeyFormat } from "@/lib/storage";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const { errorResponse, adminUser } = await verifyAdminRequest(req, "support");
@@ -31,38 +33,12 @@ export async function GET(req: NextRequest) {
     for (const data of users) {
       const uid = data.id;
 
-      // Check subcollection for AI settings without ever exposing keys
-      let geminiConnected = isValidKeyFormat(data.geminiApiKey, "gemini");
-      let openaiConnected = false;
-      let anthropicConnected = false;
+      // Check root document for AI keys without exposing keys
+      const geminiConnected = isValidKeyFormat(data.geminiApiKey, "gemini");
+      const openaiConnected = isValidKeyFormat(data.openaiApiKey, "openai");
+      const anthropicConnected = isValidKeyFormat(data.anthropicApiKey, "anthropic");
 
-      try {
-        const aiData = await getDocumentByPath(`users/${uid}/settings/ai`, adminUser?.token);
-        if (aiData) {
-          if (isValidKeyFormat(aiData.geminiApiKey, "gemini")) geminiConnected = true;
-          if (isValidKeyFormat(aiData.openaiApiKey, "openai")) openaiConnected = true;
-          if (isValidKeyFormat(aiData.anthropicApiKey, "anthropic")) anthropicConnected = true;
-        }
-      } catch {
-        // graceful ignore
-      }
-
-      // Read project count and conversions
-      let totalProjects = 0;
-      let hiredProjects = 0;
-      try {
-        const appData = await getDocumentByPath(`users/${uid}/applications/data`, adminUser?.token);
-        if (appData && Array.isArray(appData.items)) {
-          totalProjects = appData.items.length;
-          hiredProjects = appData.items.filter((i: any) => i.stage === "hired").length;
-        }
-      } catch {
-        // graceful ignore
-      }
-
-      const conversionRate = totalProjects > 0 ? Math.round((hiredProjects / totalProjects) * 1000) / 10 : 0;
-
-      // Extract safe subscription
+      // Safe subscription
       const sub = data.subscription || {
         planId: "starter",
         planName: "Starter Plan",
@@ -85,9 +61,9 @@ export async function GET(req: NextRequest) {
         role: data.role || "user",
         subscription: sub,
         stats: {
-          totalProjects,
-          hiredProjects,
-          conversionRate,
+          totalProjects: 0,
+          hiredProjects: 0,
+          conversionRate: 0,
         },
         aiKeyStatus: {
           gemini: geminiConnected,
@@ -148,6 +124,32 @@ export async function GET(req: NextRequest) {
     const totalPages = Math.ceil(total / limit) || 1;
     const startIndex = (page - 1) * limit;
     const paginatedUsers = userList.slice(startIndex, startIndex + limit);
+
+    // Fetch project stats ONLY for the paginated slice in parallel with timeout guard
+    try {
+      await Promise.race([
+        Promise.allSettled(
+          paginatedUsers.map(async (u) => {
+            try {
+              const appData = await getDocumentByPath(`users/${u.uid}/applications/data`, adminUser?.token);
+              if (appData && Array.isArray(appData.items)) {
+                u.stats.totalProjects = appData.items.length;
+                u.stats.hiredProjects = appData.items.filter((i: any) => i.stage === "hired").length;
+                u.stats.conversionRate =
+                  u.stats.totalProjects > 0
+                    ? Math.round((u.stats.hiredProjects / u.stats.totalProjects) * 1000) / 10
+                    : 0;
+              }
+            } catch {
+              // ignore individual failure
+            }
+          })
+        ),
+        new Promise((resolve) => setTimeout(resolve, 1500)),
+      ]);
+    } catch {
+      // Non-blocking
+    }
 
     return NextResponse.json({
       users: paginatedUsers,

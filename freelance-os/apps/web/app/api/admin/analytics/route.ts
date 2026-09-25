@@ -10,6 +10,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminRequest } from "@/lib/auth/admin-auth";
 import { getCollectionDocs, getDocumentByPath } from "@/lib/firebase/firestore-rest";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const { errorResponse, adminUser } = await verifyAdminRequest(req, "support");
@@ -39,12 +41,23 @@ export async function GET(req: NextRequest) {
       if (latestTime >= oneDayAgo) dau++;
       if (latestTime >= sevenDaysAgo) wau++;
       if (latestTime >= thirtyDaysAgo) mau++;
+    }
 
-      // Aggregate application funnel
-      try {
-        const appDoc = await getDocumentByPath(`users/${u.id}/applications/data`, adminUser?.token);
-        if (appDoc && Array.isArray(appDoc.items)) {
-          for (const item of appDoc.items) {
+    // Aggregate application funnel across active users in parallel with timeout guard
+    const userSample = users.slice(0, 15);
+    try {
+      const appDocsResults = await Promise.race([
+        Promise.allSettled(
+          userSample.map((u: any) =>
+            getDocumentByPath(`users/${u.id}/applications/data`, adminUser?.token)
+          )
+        ),
+        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 1800)),
+      ]);
+
+      for (const res of appDocsResults) {
+        if (res.status === "fulfilled" && res.value && Array.isArray(res.value.items)) {
+          for (const item of res.value.items) {
             funnelTotal++;
             const st = item.stage;
             if (st === "applied" || st === "client_replied" || st === "hired") {
@@ -61,9 +74,9 @@ export async function GET(req: NextRequest) {
             }
           }
         }
-      } catch {
-        // fallback
       }
+    } catch {
+      // fallback
     }
 
     // AI telemetry breakdown
@@ -76,8 +89,11 @@ export async function GET(req: NextRequest) {
     };
 
     try {
-      const events = await getCollectionDocs("telemetry_events", adminUser?.token);
-      for (const e of events) {
+      const events = await Promise.race([
+        getCollectionDocs("telemetry_events", adminUser?.token),
+        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 1500)),
+      ]);
+      for (const e of events || []) {
         if (e.metadata?.provider && aiProviders[e.metadata.provider] !== undefined) {
           aiProviders[e.metadata.provider]++;
         }

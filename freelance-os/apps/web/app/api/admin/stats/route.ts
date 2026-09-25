@@ -14,6 +14,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminRequest } from "@/lib/auth/admin-auth";
 import { getCollectionDocs, getDocumentByPath } from "@/lib/firebase/firestore-rest";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const { errorResponse, adminUser } = await verifyAdminRequest(req, "support");
@@ -78,7 +80,7 @@ export async function GET(req: NextRequest) {
 
       // Check user subscription info
       const sub = u.subscription;
-      const plan = (sub?.planId || "starter").toLowerCase();
+      const plan = String(sub?.planId || "starter").toLowerCase();
       if (subscriptionDist[plan] !== undefined) {
         subscriptionDist[plan]++;
       } else {
@@ -92,7 +94,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 2. Aggregate Projects / Applications across users
+    // 2. Aggregate Projects / Applications across users in parallel with timeout guard
     let totalProjects = 0;
     let hiredProjects = 0;
     let totalPipelineValue = 0;
@@ -104,11 +106,20 @@ export async function GET(req: NextRequest) {
       rejected: 0,
     };
 
-    for (const u of users.slice(0, 50)) {
-      try {
-        const appData = await getDocumentByPath(`users/${u.id}/applications/data`, adminUser?.token);
-        if (appData && Array.isArray(appData.items)) {
-          for (const item of appData.items) {
+    const userSample = users.slice(0, 15);
+    try {
+      const appDocsResults = await Promise.race([
+        Promise.allSettled(
+          userSample.map((u: any) =>
+            getDocumentByPath(`users/${u.id}/applications/data`, adminUser?.token)
+          )
+        ),
+        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 1800)),
+      ]);
+
+      for (const res of appDocsResults) {
+        if (res.status === "fulfilled" && res.value && Array.isArray(res.value.items)) {
+          for (const item of res.value.items) {
             totalProjects++;
             const stage = item.stage || "new";
             stageDistribution[stage] = (stageDistribution[stage] || 0) + 1;
@@ -120,9 +131,9 @@ export async function GET(req: NextRequest) {
             }
           }
         }
-      } catch {
-        // subcollection query fallback
       }
+    } catch {
+      // Subcollection query fallback
     }
 
     const conversionRate = totalProjects > 0 ? Math.round((hiredProjects / totalProjects) * 1000) / 10 : 0;
@@ -131,8 +142,11 @@ export async function GET(req: NextRequest) {
     let aiTotalAnalyses = 0;
     const aiProviderDist: Record<string, number> = { gemini: 0, openai: 0, anthropic: 0 };
     try {
-      const events = await getCollectionDocs("telemetry_events", adminUser?.token);
-      for (const ev of events) {
+      const events = await Promise.race([
+        getCollectionDocs("telemetry_events", adminUser?.token),
+        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 1500)),
+      ]);
+      for (const ev of events || []) {
         if (ev.eventType === "analysis_completed" || ev.provider) {
           aiTotalAnalyses++;
           const prov = ev.metadata?.provider || ev.provider;

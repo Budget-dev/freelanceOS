@@ -16,6 +16,8 @@ import { verifyAdminRequest } from "@/lib/auth/admin-auth";
 import { getDocumentByPath, getCollectionDocs } from "@/lib/firebase/firestore-rest";
 import { isValidKeyFormat } from "@/lib/storage";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(
   req: NextRequest,
   { params }: { params: { uid: string } }

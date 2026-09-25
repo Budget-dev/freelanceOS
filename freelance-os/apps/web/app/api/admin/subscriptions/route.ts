@@ -12,6 +12,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminRequest } from "@/lib/auth/admin-auth";
 import { getCollectionDocs } from "@/lib/firebase/firestore-rest";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const { errorResponse, adminUser } = await verifyAdminRequest(req, "support");

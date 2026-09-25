@@ -13,6 +13,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminRequest } from "@/lib/auth/admin-auth";
 import { getCollectionDocs, getDocumentByPath } from "@/lib/firebase/firestore-rest";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const { errorResponse, adminUser } = await verifyAdminRequest(req, "support");
@@ -37,14 +39,38 @@ export async function GET(req: NextRequest) {
       rejected: 0,
     };
 
-    for (const uData of users.slice(0, 50)) {
-      const uid = uData.id;
-      const userName = uData.displayName || "Freelancer";
-      const userEmail = uData.email || "";
+    // Filter users first if user search is specified
+    let targetUsers = users;
+    if (userSearch) {
+      targetUsers = users.filter(
+        (u: any) =>
+          (u.displayName || "").toLowerCase().includes(userSearch) ||
+          (u.email || "").toLowerCase().includes(userSearch) ||
+          (u.id || "").toLowerCase().includes(userSearch)
+      );
+    }
 
-      try {
-        const appDoc = await getDocumentByPath(`users/${uid}/applications/data`, adminUser?.token);
-        if (appDoc && Array.isArray(appDoc.items)) {
+    const candidateUsers = targetUsers.slice(0, 20);
+
+    try {
+      const appDocsResults = await Promise.race([
+        Promise.allSettled(
+          candidateUsers.map((u: any) =>
+            getDocumentByPath(`users/${u.id}/applications/data`, adminUser?.token).then((doc) => ({
+              uid: u.id,
+              userName: u.displayName || "Freelancer",
+              userEmail: u.email || "",
+              createdAt: u.createdAt,
+              doc,
+            }))
+          )
+        ),
+        new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 1800)),
+      ]);
+
+      for (const res of appDocsResults) {
+        if (res.status === "fulfilled" && res.value && res.value.doc && Array.isArray(res.value.doc.items)) {
+          const { uid, userName, userEmail, createdAt: userCreatedAt, doc: appDoc } = res.value;
           for (const item of appDoc.items) {
             totalProjectsCount++;
             const st = item.stage || "new";
@@ -56,7 +82,7 @@ export async function GET(req: NextRequest) {
             }
 
             allProjects.push({
-              id: item.id,
+              id: item.id || Math.random().toString(),
               userId: uid,
               userName,
               userEmail,
@@ -69,14 +95,14 @@ export async function GET(req: NextRequest) {
               appliedDate: item.appliedDate || null,
               lastActivity: item.lastActivity || "Recorded in workspace",
               platform: item.platform || "Direct",
-              createdAt: item.createdAt || uData.createdAt || new Date().toISOString(),
+              createdAt: item.createdAt || userCreatedAt || new Date().toISOString(),
               timeline: item.timeline || "",
             });
           }
         }
-      } catch {
-        // subcollection query fallback
       }
+    } catch {
+      // Subcollection query fallback
     }
 
     let filtered = allProjects;

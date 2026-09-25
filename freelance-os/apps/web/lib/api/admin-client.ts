@@ -10,7 +10,8 @@ import { auth } from "@/lib/firebase/config";
 
 export async function adminFetch<T = any>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  retries: number = 1
 ): Promise<T> {
   const currentUser = auth?.currentUser;
   if (!currentUser) {
@@ -25,14 +26,27 @@ export async function adminFetch<T = any>(
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(endpoint, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      ...options,
+      headers,
+    });
+  } catch (netErr: any) {
+    if (retries > 0) {
+      await new Promise((r) => setTimeout(r, 600));
+      return adminFetch<T>(endpoint, options, retries - 1);
+    }
+    throw new Error(netErr.message || "Network request failed");
+  }
 
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    if ((response.status === 500 || response.status === 504 || response.status === 502) && retries > 0) {
+      await new Promise((r) => setTimeout(r, 600));
+      return adminFetch<T>(endpoint, options, retries - 1);
+    }
     const errorMsg = data.error || `Admin request failed with status ${response.status}`;
     throw new Error(errorMsg);
   }

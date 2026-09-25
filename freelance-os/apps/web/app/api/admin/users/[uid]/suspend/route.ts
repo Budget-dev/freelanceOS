@@ -12,6 +12,8 @@ import { adminAuth, hasAdminCredentials } from "@/lib/firebase/admin";
 import { getDocumentByPath, setDocumentByPath } from "@/lib/firebase/firestore-rest";
 import { createAuditLog } from "@/lib/services/audit-service";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(
   req: NextRequest,
   { params }: { params: { uid: string } }

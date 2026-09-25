@@ -80,7 +80,7 @@ export async function getCollectionDocs(collectionPath: string, idToken?: string
       const snap = await Promise.race([
         adminDb.collection(collectionPath).get(),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("AdminDb timeout")), 3000)
+          setTimeout(() => reject(new Error("AdminDb timeout")), 2000)
         ),
       ]);
       return (snap as any).docs.map((d: any) => ({ id: d.id, ...d.data() }));
@@ -98,7 +98,7 @@ export async function getCollectionDocs(collectionPath: string, idToken?: string
           headers: {
             Authorization: `Bearer ${idToken}`,
           },
-          signal: AbortSignal.timeout(4000),
+          signal: AbortSignal.timeout(2000),
         }
       );
       if (res.ok) {
@@ -125,7 +125,7 @@ export async function getDocumentByPath(docPath: string, idToken?: string): Prom
       const doc = await Promise.race([
         adminDb.doc(docPath).get(),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("AdminDb timeout")), 3000)
+          setTimeout(() => reject(new Error("AdminDb timeout")), 2000)
         ),
       ]);
       if ((doc as any).exists) {
@@ -145,7 +145,7 @@ export async function getDocumentByPath(docPath: string, idToken?: string): Prom
           headers: {
             Authorization: `Bearer ${idToken}`,
           },
-          signal: AbortSignal.timeout(4000),
+          signal: AbortSignal.timeout(2000),
         }
       );
       if (res.ok) {
@@ -174,7 +174,7 @@ export async function setDocumentByPath(
       await Promise.race([
         adminDb.doc(docPath).set(data, { merge }),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("AdminDb timeout")), 3000)
+          setTimeout(() => reject(new Error("AdminDb timeout")), 2000)
         ),
       ]);
       return true;
@@ -196,7 +196,7 @@ export async function setDocumentByPath(
             Authorization: `Bearer ${idToken}`,
           },
           body: JSON.stringify({ fields }),
-          signal: AbortSignal.timeout(4000),
+          signal: AbortSignal.timeout(2000),
         }
       );
       return res.ok;

@@ -72,6 +72,8 @@ const DEFAULT_SYSTEM_PLANS = [
   },
 ];
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const { errorResponse, adminUser } = await verifyAdminRequest(req, "support");

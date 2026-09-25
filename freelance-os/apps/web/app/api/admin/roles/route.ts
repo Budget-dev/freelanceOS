@@ -15,6 +15,8 @@ import { createAuditLog } from "@/lib/services/audit-service";
 
 const BOOTSTRAP_SUPER_ADMIN = "venkateshchop14@gmail.com";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const { errorResponse, adminUser } = await verifyAdminRequest(req, "super_admin");

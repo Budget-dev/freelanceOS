@@ -295,10 +295,7 @@ export async function verifyAdminRequest(
       },
     };
   } catch (err: any) {
-    if (err?.digest === "DYNAMIC_SERVER_USAGE") {
-      throw err;
-    }
-    console.error("[AdminAuth] Unexpected error in verifyAdminRequest:", err);
+    console.error("[AdminAuth] Unexpected error in verifyAdminRequest:", err?.message || err);
     return {
       errorResponse: NextResponse.json(
         { error: "Authorization error: " + (err?.message || "Internal error") },

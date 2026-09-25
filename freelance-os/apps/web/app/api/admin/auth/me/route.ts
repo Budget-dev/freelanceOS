@@ -9,6 +9,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminRequest, hasRole } from "@/lib/auth/admin-auth";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const { errorResponse, adminUser } = await verifyAdminRequest(req, "support");
